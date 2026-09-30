@@ -1,0 +1,5 @@
+export function ConsentBadge({ consent }) { return <span className={`badge ${consent ? 'green' : 'neutral'}`}>{consent ? 'Opted in' : 'Not opted in'}</span> }
+import { formatDate } from "../format"
+export default function CustomerTable({ customers, onOpen }) {
+  return <div className="table-scroll"><table><thead><tr><th>Customer</th><th>Phone</th><th>Date of birth</th><th>Marketing SMS</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>{customers.map(c => <tr key={c.customer_id}><td><div className="person"><span className="avatar" aria-hidden="true">{c.first_name[0]}{c.last_name[0]}</span><strong>{c.first_name} {c.last_name}</strong></div></td><td>{c.phone}</td><td>{formatDate(c.date_of_birth)}</td><td><ConsentBadge consent={c.marketing_consent} /></td><td><span className={`status ${c.status}`}>{c.status}</span></td><td><button className="text-button" onClick={() => onOpen(c.customer_id)} aria-label={`View and edit ${c.first_name} ${c.last_name}`}>View / edit →</button></td></tr>)}</tbody></table></div>
+}
