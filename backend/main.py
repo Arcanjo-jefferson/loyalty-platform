@@ -1,6 +1,9 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from app.media_routes import router as media_router
+from app.media_service import MediaService, InvalidImage, ImageTooLarge, MediaNotFound
+from app.media_storage import build_media_storage, MediaUnavailable
 from app.config import Settings, build_repository
 from app.repository import ConcurrentModification, DuplicatePhone, StorageUnavailable
 from app.routes import identity_router, router
@@ -8,13 +11,31 @@ from app.auth import CognitoVerifier
 from app.service import CustomerNotFound, CustomerService
 
 
-def create_app(repository=None, token_verifier=None):
-    app = FastAPI(title='Loyalty Platform API', version='0.4.0')
+def create_app(repository=None, token_verifier=None, media_storage=None):
+    app = FastAPI(title='Loyalty Platform API', version='0.5.0')
     app.state.customer_service = CustomerService(repository if repository is not None else build_repository(Settings.from_environment()))
-    app.add_middleware(CORSMiddleware, allow_origins=['http://localhost:5173', 'http://127.0.0.1:5173'], allow_methods=['GET', 'POST', 'PUT'], allow_headers=['Content-Type', 'Authorization'])
+    app.add_middleware(CORSMiddleware, allow_origins=['http://localhost:5173', 'http://127.0.0.1:5173'], allow_methods=['GET', 'POST', 'PUT', 'PATCH'], allow_headers=['Content-Type', 'Authorization'])
     app.state.token_verifier = token_verifier if token_verifier is not None else CognitoVerifier.from_environment()
     app.include_router(router)
     app.include_router(identity_router)
+    app.state.media_service = MediaService(app.state.customer_service, media_storage if media_storage is not None else build_media_storage())
+    app.include_router(media_router)
+
+    @app.exception_handler(MediaUnavailable)
+    async def media_unavailable(request, exc):
+        return JSONResponse(status_code=503, content={'detail': 'Customer media is temporarily unavailable. Check backend storage configuration or try again.'})
+
+    @app.exception_handler(InvalidImage)
+    async def invalid_image(request, exc):
+        return JSONResponse(status_code=422, content={'detail': 'Use a valid, non-animated JPEG, PNG or WebP image, up to 20 million pixels.'})
+
+    @app.exception_handler(ImageTooLarge)
+    async def oversized_image(request, exc):
+        return JSONResponse(status_code=413, content={'detail': 'Image must be 5 MiB or smaller.'})
+
+    @app.exception_handler(MediaNotFound)
+    async def media_not_found(request, exc):
+        return JSONResponse(status_code=404, content={'detail': 'No image has been uploaded.'})
 
     @app.exception_handler(DuplicatePhone)
     async def duplicate_phone(request: Request, exc: DuplicatePhone):
@@ -34,7 +55,7 @@ def create_app(repository=None, token_verifier=None):
 
     @app.get('/')
     def root():
-        return {'message': 'Loyalty Platform API is running', 'version': '0.4.0'}
+        return {'message': 'Loyalty Platform API is running', 'version': '0.5.0'}
 
     @app.get('/health')
     def health():

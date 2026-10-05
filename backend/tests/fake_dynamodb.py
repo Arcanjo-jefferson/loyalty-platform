@@ -92,3 +92,28 @@ class FakeDynamoDB:
                     raise AssertionError(f'Unsupported transaction action: {kind}')
             self.items = staged
             return {}
+
+    def update_item(self, **params):
+        with self.lock:
+            self.calls.append(('update_item', deepcopy(params)))
+            if self.injected_errors:
+                raise self.injected_errors.pop(0)
+            key = self.key(self.decode(params['Key']))
+            item = self.items.get(key)
+            values = self.decode(params['ExpressionAttributeValues'])
+            names = params['ExpressionAttributeNames']
+            assert params['UpdateExpression'] == 'SET #media = :media'
+            field = names['#media']
+            assert field.startswith('media_')
+            condition = params['ConditionExpression']
+            valid = item is not None and item.get('item_type') == values[':type']
+            if condition == '#type = :type AND attribute_not_exists(#media)':
+                valid = valid and field not in item
+            elif condition == '#type = :type AND #media.#revision = :revision':
+                valid = valid and item.get(field, {}).get('revision') == values[':revision']
+            else:
+                raise AssertionError('Unsupported media condition')
+            if not valid:
+                raise ClientError({'Error': {'Code': 'ConditionalCheckFailedException', 'Message': 'fixture'}}, 'UpdateItem')
+            self.items[key][field] = deepcopy(values[':media'])
+            return {}

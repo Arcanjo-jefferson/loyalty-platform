@@ -163,3 +163,28 @@ class DynamoDBCustomerRepository:
                 raise StorageUnavailable() from exc
             except BotoCoreError as exc:
                 raise StorageUnavailable() from exc
+
+    def get_media(self, business_id, customer_id, kind):
+        item = self._read_item(business_id, customer_id)
+        if not item or item.get('item_type') != 'CUSTOMER':
+            return None
+        return item.get('media_' + kind)
+
+    def save_media(self, business_id, customer_id, kind, metadata, *, expected_revision):
+        names = {'#media': 'media_' + kind, '#type': 'item_type'}
+        values = {':media': metadata, ':type': 'CUSTOMER'}
+        condition = '#type = :type AND attribute_not_exists(#media)'
+        if expected_revision is not None:
+            names['#revision'] = 'revision'
+            values[':revision'] = expected_revision
+            condition = '#type = :type AND #media.#revision = :revision'
+        try:
+            self.client.update_item(TableName=self.table_name, Key=self._key(business_id, customer_id),
+                                    UpdateExpression='SET #media = :media', ConditionExpression=condition,
+                                    ExpressionAttributeNames=names, ExpressionAttributeValues=self._encode(values))
+        except ClientError as exc:
+            if exc.response.get('Error', {}).get('Code') == 'ConditionalCheckFailedException':
+                raise ConcurrentModification() from exc
+            raise StorageUnavailable() from exc
+        except BotoCoreError as exc:
+            raise StorageUnavailable() from exc

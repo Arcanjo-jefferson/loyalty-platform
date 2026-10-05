@@ -64,12 +64,12 @@ Implemented AWS integrations:
 
 - DynamoDB customer persistence
 - Cognito business-user authentication
+- Private S3 customer media
 
 Planned AWS architecture:
 
 - Lambda
 - API Gateway
-- S3
 - CloudFront
 - EventBridge
 - CloudWatch
@@ -209,7 +209,7 @@ The system should preserve:
 - consent status
 - consent timestamp
 
-Future versions should support consent history/evidence.
+Signed consent evidence is implemented in Milestone 4; full consent history remains future work.
 
 A signed consent form may be stored as supporting evidence but does not replace
 the structured consent status.
@@ -292,9 +292,9 @@ Authentication now uses Amazon Cognito for the current customer API.
 Cognito authenticates BUSINESS USERS, not loyalty customers.
 
 The following authorization model is finalized. Milestone 3 implements
-authentication, role guards and current customer permissions. Permissions for
-documents, SMS, visits, vouchers, staff administration and reports remain
-requirements for future endpoints, not implemented functionality.
+authentication, role guards and current customer permissions. Milestone 4 implements protected customer media and manual ID verification.
+Permissions for SMS, visits, vouchers, staff administration and reports remain
+requirements for future endpoints.
 
 ## OWNER / ADMIN
 
@@ -381,7 +381,7 @@ user, customer, timestamp and relevant changed fields, scoped to the business.
 
 # Customer Documents
 
-Future requirements include:
+Milestone 4 implements:
 
 - customer profile photograph
 - ID document image
@@ -389,9 +389,13 @@ Future requirements include:
 
 Images/files must NOT be stored directly inside DynamoDB.
 
-Future storage:
+Current storage:
 
-Private Amazon S3 bucket.
+Existing private Amazon S3 bucket contactly-private-documents-dev in eu-west-1.
+Backend-controlled uploads and authenticated image proxying; no exposed keys or
+presigned URLs. Media metadata lives in private media_profile, media_identity
+and media_consent attributes on the CUSTOMER item. Ordinary customer responses
+exclude it; existing records and phone locks remain compatible.
 
 DynamoDB stores metadata/references.
 
@@ -423,10 +427,11 @@ OWNER / ADMIN and MANAGER may view and verify customer ID documents and view
 signed consent evidence. STAFF must not access ID document images or signed
 consent evidence. Customer profile photos may be viewed by all three roles
 within their own business. Backend authorization must enforce this distinction,
-including any future private file retrieval.
+including every private image and metadata retrieval.
 
-S3 objects should eventually use encryption, authorization controls and
-appropriate retention/deletion policies.
+S3 puts request SSE-S3 (AES256), with no ACL. Block Public Access stays enabled
+and ACLs disabled. Development versioning is disabled to minimize cost.
+Production retention/deletion and KMS strategy remain future policy work.
 
 Profile photographs are NOT intended for facial recognition.
 
@@ -604,12 +609,12 @@ Automated verification uses mocks/fakes/stubs, not the real AWS account.
 The project owner reports successful manual AWS DynamoDB persistence
 verification. Automated tests continue using fakes/stubs without AWS access.
 
-Document metadata extensibility is preserved; no document/S3 functionality
-or other document/loyalty/messaging milestone has been implemented.
+Milestone 2 preserved document metadata extensibility; Milestone 4 now adds
+S3 media. Loyalty and messaging remain unimplemented.
 
 ---
 
-# Milestone 3 — IMPLEMENTED; LIVE COGNITO ACCEPTANCE PENDING
+# Milestone 3 — COMPLETE; LIVE COGNITO VERIFIED BY PROJECT OWNER
 
 - Cognito email/password business-user login with Amplify SRP authentication
 - Temporary-password completion, per-tab session storage, refresh and logout
@@ -629,15 +634,42 @@ to write it. Administrative provisioning assigns business membership. No AWS
 resources are automatically created or modified. App client ID is required
 configuration; there is no hardcoded client secret, token or user identity.
 
-Live Cognito login acceptance still requires the manual README procedure.
+The project owner reports live Cognito login, DynamoDB and tenant isolation working.
 Customer edit audit persistence, production MFA/recovery, immediate token
 revocation enforcement and deployment hardening remain future work. ID tokens
 already issued remain valid until expiry under local JWT verification.
 
-# Future Milestones
+# Milestone 4 — IMPLEMENTED; LIVE S3/BROWSER ACCEPTANCE PENDING
 
-## Milestone 4
-Private S3 document storage and webcam capture
+- Backend-controlled JPEG/PNG/WebP uploads, max 5 MiB and 20 million pixels
+- Pillow actual-format verification, full decode and fresh-pixel re-encoding;
+  embedded metadata stripped, animated/corrupt images rejected
+- Server-generated businesses/<business>/customers/<customer>/<profile|identity|consent>/<uuid>.<extension> keys
+- Private metadata on customer items, conditional per-category revisions;
+  existing customer/phone writes preserve it and never return it in general APIs
+- Profile view/upload/replace: Owner, Manager and Staff
+- ID and consent metadata/image/upload: Owner and Manager only; Staff denied
+- Manual ID Pending/Verified/Rejected, with new/replaced ID reset to Pending
+- uploaded_by/at and verified_by/at retained privately; no subject IDs in the UI
+- Consent evidence supports structured consent; never modifies marketing_consent
+- Authenticated image proxy with no-store headers; no presigned URLs/keys exposed
+- Camera preview/capture/retake, device files and camera-denial fallback
+- New object then conditional metadata commit then old-object deletion;
+  failed cleanup references retained for retry on subsequent replacement
+- No distributed S3/DynamoDB transaction: crashes/ambiguous writes may leave
+  private orphans requiring operator reconciliation; no background janitor
+- S3_DOCUMENTS_BUCKET and S3_REGION backend config; optional local AWS_PROFILE
+- AWS-independent media/role/tenant/validation/replacement tests
+
+Use DynamoDB with real S3; memory-mode references disappear on restart.
+Bucket resources are never created/modified automatically. Development versioning
+is disabled (deleted replacement objects cannot be recovered). Production
+retention/deletion, malware policy, rate limits, full audits and KMS evaluation
+remain required. Use fictional documents only. No OCR, facial recognition,
+biometric matching or automated document verification. See README for setup,
+permissions, endpoints and manual acceptance procedure.
+
+# Future Milestones
 
 ## Milestone 5
 QR scanning and visit tracking

@@ -2,7 +2,7 @@
 
 A local MVP for a future multi-business customer loyalty and SMS marketing platform. The project is designed to give managers a customer directory and, in later milestones, tools for recording visits, issuing rewards and communicating with customers who have opted into marketing.
 
-**Current status: Milestones 1–2 completed; Milestone 3 authentication and authorization implemented, awaiting live Cognito acceptance testing.** The application runs locally with a React manager dashboard and a FastAPI customer API. Customer persistence is configurable between DynamoDB and an optional in-memory repository. Cognito business-user login and server-side role/tenant authorization are implemented. Document uploads, SMS sending and loyalty workflows remain planned. DynamoDB persistence was manually verified by the project owner.
+**Current status: Milestones 1–3 completed and manually verified against AWS by the project owner; Milestone 4 implemented, awaiting live S3/browser acceptance testing.** The application runs locally with a React manager dashboard and a FastAPI customer API. Customer persistence is configurable between DynamoDB and an optional in-memory repository. Cognito business-user login and server-side role/tenant authorization are implemented. Private customer images, camera capture and ID verification are implemented. SMS sending and loyalty workflows remain planned. DynamoDB persistence was manually verified by the project owner.
 
 ## Implemented features
 
@@ -24,17 +24,18 @@ A local MVP for a future multi-business customer loyalty and SMS marketing platf
 
 - Cognito email/password login, temporary-password completion, per-tab sessions, token refresh and logout; no public sign-up.
 - Verified JWT authentication and reusable Owner/Manager/Staff guards on every customer endpoint.
+- Private profile photos, ID documents and signed consent evidence; device image selection, camera preview/capture/retake and manual ID verification.
 
 ## Technology stack
 
 | Area     | Current technology |
 | ---      | --- |
 | Frontend | React 19, JavaScript, Vite 8, Amplify Auth, reusable components and CSS |
-| Backend  | Python, FastAPI, Pydantic 2, Uvicorn, PyJWT with cryptography |
-| Storage  | DynamoDB via boto3; optional process-local in-memory repository |
+| Backend  | Python, FastAPI, Pydantic 2, Uvicorn, PyJWT with cryptography, Pillow |
+| Storage  | DynamoDB and private S3 via boto3; optional process-local in-memory customer repository |
 | Checks   | Python `unittest`, Node.js test runner, Oxlint, Vite production build |
 
-No large UI framework or additional routing library is used. The backend uses the existing boto3 dependency for DynamoDB; no additional storage or test dependencies were added.
+No large UI framework or additional routing library is used. The backend reuses boto3 for DynamoDB and S3. Pillow validates and re-encodes images; no npm dependencies were added for Milestone 4.
 
 ## Project structure
 
@@ -51,6 +52,9 @@ loyalty-platform/
 │   │   ├── auth.py             # Cognito JWT verification, identity and role guards
 │   │   ├── config.py           # Environment loading and repository selection
 │   │   ├── dynamodb_repository.py # DynamoDB mapping, queries and transactions
+│   │   ├── media_routes.py     # Authenticated metadata/upload/image/verification endpoints
+│   │   ├── media_service.py    # Validation, revisions, audit metadata and replacement cleanup
+│   │   ├── media_storage.py    # Private S3 adapter and SDK configuration
 │   │   ├── models.py           # Customer models and input validation
 │   │   ├── routes.py           # Customer HTTP endpoints
 │   │   ├── service.py          # Customer IDs, consent and timestamp logic
@@ -60,6 +64,7 @@ loyalty-platform/
 │       ├── test_age_validation.py
 │       ├── test_auth.py
 │       ├── auth_test_server.py # Test-only injected verifier; never deploy
+│       ├── test_media.py
 │       ├── test_config.py
 │       ├── test_dynamodb_repository.py
 │       └── fake_dynamodb.py
@@ -79,6 +84,8 @@ loyalty-platform/
     │   ├── index.css
     │   └── components/
     │       ├── CustomerForm.jsx
+    │       ├── CustomerMedia.jsx
+    │       ├── ImageCapture.jsx
     │       ├── CustomerProfile.jsx
     │       ├── CustomerTable.jsx
     │       └── Notification.jsx
@@ -112,7 +119,7 @@ Customer rows use their UUID as the sort key and `item_type=CUSTOMER`. Phone-loc
 - **Serialization:** dates and UTC timestamps are ISO strings, consent is Boolean and optional empty fields are null. All existing customer fields are persisted. Storage-only fields are excluded from customer responses.
 - **Failures:** AWS/credential/network errors become a generic 503 response; raw AWS messages and stack traces are not returned to the frontend. There is no automatic fallback to memory.
 
-Updates modify only managed editable fields, consent timestamp and update timestamp. Immutable fields and unknown future metadata attributes remain intact. Future document references can use separate typed records in the same business partition (with a customer association) or additional metadata attributes. No document model, document API, S3 upload or webcam capture is implemented.
+Updates modify only managed editable fields, consent timestamp and update timestamp. Immutable fields and unknown future metadata attributes remain intact. Future document references can use separate typed records in the same business partition (with a customer association) or additional metadata attributes. Milestone 4 uses private media attributes on existing customer items, as described below.
 
 The adapter expects records created through this application, including their phone locks and type markers. It does not migrate old in-memory records or automatically adopt manually inserted customer rows. Treat pre-existing unmanaged rows as a separate migration task rather than bypassing lock ownership.
 
@@ -129,10 +136,10 @@ The verified user context contains subject, optional email, business, groups and
 | Role | Current customer permissions | Future authorization helpers |
 | --- | --- | --- |
 | Owner | Create, list/search, view, edit and change active/inactive status | `require_owner` for owner-only administration |
-| Manager | Create, list/search, view, edit and change active/inactive status | `require_management` for Owner/Manager, including future sensitive documents |
+| Manager | Create, list/search, view, edit and change active/inactive status | `require_management` for Owner/Manager, including sensitive documents |
 | Staff | Create active customers, list/search, view and edit details; cannot change status | `require_customer_access` for all three roles |
 
-The full finalized role model remains in `PROJECT_CONTEXT.md`. Guards for future sensitive operations are available; no staff-management, document, SMS or report endpoints have been implemented. Hiding UI controls is supplementary; the backend is authoritative. Staff edit auditing remains a future requirement, not an implemented audit log.
+The full finalized role model remains in `PROJECT_CONTEXT.md`. Guards for future sensitive operations are available; document endpoints are now implemented; staff-management, SMS and report endpoints remain planned. Hiding UI controls is supplementary; the backend is authoritative. Staff edit auditing remains a future requirement, not an implemented audit log.
 
 Amplify refreshes expired tokens when a refresh token is available ([session documentation](https://docs.amplify.aws/react/frontend/auth/manage-user-sessions/)). On a 401, the frontend attempts one forced refresh; another 401 or refresh failure clears the authenticated view and asks for sign-in. A 403 stays an authorization error. Logout clears the SDK's local session and unmounts customer data. A valid copied JWT remains verifiable until expiry: local signature verification does not check server-side revocation on every request. Role/business changes also take effect as new tokens are issued; use short token lifetimes and reauthentication as appropriate.
 
@@ -301,7 +308,7 @@ Frontend tests cover phone/age validation, Ireland's calendar date, bearer attac
 
 - **DynamoDB mode persists customer records across backend restarts/reloads.** The project owner has manually verified live DynamoDB persistence.
 - **Memory mode only:** records are process-local, start empty and are lost on restart/reload. Use one worker in this mode; different workers have separate records. There is no automatic migration between memory and DynamoDB.
-- Authentication and role/tenant checks are implemented, but this remains a local development application. Live Cognito login requires acceptance testing. Browser sessions are JavaScript-readable, backend JWT validation does not immediately revoke already issued tokens, and production HTTPS, MFA, rate limiting and audit hardening remain outstanding.
+- Authentication and role/tenant checks are implemented, but this remains a local development application. The project owner has manually verified live Cognito login and tenant isolation. Browser sessions are JavaScript-readable, backend JWT validation does not immediately revoke already issued tokens, and production HTTPS, MFA, rate limiting and audit hardening remain outstanding.
 - Customer data is not saved to browser storage. The customer directory does not display internal IDs or QR tokens, although the API returns them.
 - SMS consent is recorded, but no messages are sent. There is no QR scanning, visit recording, loyalty counter, reward issuance, voucher redemption or historical audit workflow.
 
@@ -335,15 +342,14 @@ Live Cognito acceptance has not been performed by the automated tests; no real u
 
 ## Planned development roadmap
 
-Milestone 2 persistence has been manually verified by the project owner. Milestone 3 Cognito integration and current customer authorization are implemented, pending live login acceptance testing. The following later milestones are **not implemented**, following `PROJECT_CONTEXT.md`:
+Milestone 2 persistence has been manually verified by the project owner. Milestone 3 Cognito integration and current customer authorization are manually verified. Milestone 4 private S3 media is implemented, pending live S3/browser acceptance testing. The following later milestones are **not implemented**, following `PROJECT_CONTEXT.md`:
 
-- **Milestone 4:** private S3 customer documents and webcam capture; no facial recognition.
 - **Milestone 5:** QR scanning and confirmed visit tracking with preserved visit history.
 - **Milestone 6:** unique €10 vouchers after five visits, progress reset to 0/5 without deleting historical visits, and single-use redemption.
 - **Milestone 7:** Twilio messaging, consent-aware campaigns and scheduled birthday promotions.
 - **Milestone 8:** audit/security/privacy hardening and production deployment, including future Lambda/API Gateway and hosting infrastructure.
 
-Exact boundaries may evolve. No S3 upload, QR loyalty, vouchers, Twilio, birthday automation or Lambda deployment is included in the current implementation.
+Exact boundaries may evolve. No QR loyalty, vouchers, Twilio, birthday automation or Lambda deployment is included in the current implementation.
 
 ### Retrying a temporary-password sign-in
 
@@ -359,7 +365,7 @@ the provisioned email and temporary password, submit the permanent password
 without reloading the page, and verify the dashboard loads. Then sign out and
 verify login with the permanent password. Cognito challenge expiry still applies.
 Automated challenge tests use synthetic HTTP responses with the installed SDK;
-they do not contact AWS. Real first-login acceptance remains a manual check.
+they do not contact AWS. Real first-login acceptance was completed by the project owner; automated tests use only synthetic responses.
 
 ### Diagnosing local Cognito membership failures
 
@@ -386,3 +392,173 @@ are disabled otherwise. Collect only this sanitized line and the `/auth/me`
 HTTP status when reporting problems. Do not share authorization headers,
 network exports, token storage, or complete token payloads. Restart without
 `AUTH_DIAGNOSTICS=true` after troubleshooting.
+
+
+## Milestone 4: private customer media
+
+FastAPI controls uploads and proxies image bytes after Cognito authentication,
+role authorization and a business-scoped customer lookup. No S3 keys, presigned
+URLs, AWS credentials, document contents or audit subject IDs are returned in
+ordinary customer/list responses. No bucket, policy, CORS, table or Cognito
+configuration is changed by the application. Backend proxying requires no S3
+browser CORS configuration.
+
+| Category | Owner | Manager | Staff |
+| --- | --- | --- | --- |
+| Profile photo | View/upload/replace | View/upload/replace | View/upload/replace |
+| ID document | View/upload/replace; verify/reject | View/upload/replace; verify/reject | No metadata, image or upload access |
+| Signed consent evidence | View/upload/replace | View/upload/replace | No metadata, image or upload access |
+
+Permissions are enforced on each backend operation, including direct image
+requests. Staff controls are hidden as an additional UI measure. Tenant scope
+comes exclusively from verified `custom:business_id`; a conflicting legacy
+business query is denied. A cross-business or missing customer returns 404.
+The browser's customer ID is only a lookup identifier, never authorization.
+
+### Storage and replacement
+
+Existing development bucket: **contactly-private-documents-dev**, **eu-west-1**.
+Keep Block Public Access enabled, ACLs disabled and SSE-S3 enabled. Each put
+explicitly requests `AES256` encryption and never sets an ACL. Conditional
+creation prevents overwriting an existing object. Versioning is **disabled in
+development to minimize cost**; deleting a replaced image is irreversible.
+
+Keys follow `businesses/<business_id>/customers/<customer_id>/<category>/<random-uuid-hex>.<extension>`,
+where category is `profile`, `identity` or `consent`. Names, phones, emails,
+birth dates and document numbers are never included. The backend chooses the
+key and refuses references outside the expected tenant/customer/category prefix.
+
+DynamoDB stores private `media_profile`, `media_identity`, and `media_consent`
+map attributes on the existing `CUSTOMER` item. No new table/item types or
+schema migration are needed. Records without media attributes continue working.
+Customer models exclude these attributes, and ordinary customer/phone updates
+preserve them. The in-memory adapter implements the same interface for tests.
+Use DynamoDB for real S3 tests: memory references are lost on restart and would
+leave objects without metadata.
+
+Metadata contains key, opaque revision, MIME type, encoded size, uploaded_at,
+uploaded_by (Cognito subject), plus category fields. Dedicated authorized
+metadata responses omit keys, cleanup references and user subject IDs.
+ID metadata records document_type, verification_status, verified_at and
+verified_by. Supported types are Passport, Driving Licence, National ID,
+Residence Permit and Other. Every new/replaced ID starts **Pending**; Owner or
+Manager may mark it **Verified** or **Rejected**. Verification requires the
+current revision to prevent approving a concurrently replaced image.
+Consent evidence records `signed_marketing_consent` and a snapshot of the
+related consent timestamp; it never changes `marketing_consent` or replaces
+structured consent. Subsequent consent changes do not rewrite the evidence
+snapshot or erase the image; retention decisions remain a business policy.
+
+Replacement stores a new object, conditionally updates the category's revision,
+then deletes previous objects. A conflicting metadata write discards the new
+object. A timed-out metadata write is read back before deletion so an image
+referenced by a successful write is not deleted. Failed old-object cleanup is
+retained privately as `cleanup_keys`, reported as `cleanup_pending`, and retried
+on the next replacement. Generic logs contain no keys or identities. S3 and
+DynamoDB cannot form one transaction: crashes, uncertain writes or cleanup
+failures can still leave private orphans; operator reconciliation and a
+production cleanup process are required. No background janitor is implemented.
+
+### Validation and private viewing
+
+Uploads use a **raw image body**, with matching Content-Type (`image/jpeg`,
+`image/png`, `image/webp`), maximum **5 MiB (5,242,880 bytes)**, and at most
+**20 million pixels**. No multipart parser or filename is required. FastAPI
+bounds streamed input; Pillow verifies and fully decodes the actual format,
+rejects corrupt/animated images and pixel bombs, corrects EXIF orientation,
+and re-encodes fresh pixels without embedded EXIF/GPS/text/ICC metadata.
+Re-encoded output must also fit the size limit. Filenames/extensions from the
+browser are not used. Invalid content returns 422, unsupported MIME 415, size
+violations 413, revision conflicts 409 and unavailable storage 503.
+
+For each category (`profile-photo`, `id-document`, `consent-evidence`):
+
+| Method | Path | Behaviour |
+| --- | --- | --- |
+| POST | `/customers/{id}/{category}` | Upload/replace; ID additionally requires `?document_type=Passport` (or another supported type) |
+| GET | `/customers/{id}/{category}` | Safe authorized metadata; 404 if no image |
+| GET | `/customers/{id}/{category}/image` | Authenticated image bytes; optional `revision` prevents stale viewing |
+| PATCH | `/customers/{id}/id-document/verification` | JSON `{ "revision": "<current revision>", "status": "Verified" }` or Rejected |
+
+Image/metadata responses use `Cache-Control: no-store`; images also use
+`nosniff` and no-referrer. React fetches image bytes with the existing Bearer
+transport, creates temporary local blob URLs and revokes them when hidden,
+replaced or unmounted. No persistent document images are saved to browser
+storage. Viewing requires clicking “View current image”. Authorized users can
+still save or photograph what they view; browser controls cannot prevent this.
+
+### Local configuration and acceptance test
+
+Add to **backend/.env**, retaining your working Cognito/DynamoDB configuration:
+
+```dotenv
+S3_DOCUMENTS_BUCKET=contactly-private-documents-dev
+S3_REGION=eu-west-1
+AWS_PROFILE=loyalty-dev
+```
+
+Omit AWS_PROFILE in production; use IAM roles via the normal boto3 credential
+chain. No frontend AWS variables are needed. Missing bucket configuration
+leaves customer CRUD working and media operations unavailable (503).
+
+From the project root, run in the backend terminal:
+
+```bash
+cd backend
+source venv/bin/activate
+python -m pip install -r requirements.txt
+aws sso login --profile loyalty-dev
+python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
+```
+
+In the frontend terminal:
+
+```bash
+cd frontend
+npm ci
+npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
+```
+
+1. Sign in as Owner. Open a fictional customer's profile. Select a test PNG,
+   JPEG or WebP, review the preview, upload and click View current image.
+2. Use the camera: allow permission, capture, retake, then upload. Confirm the
+   camera stops on capture/cancel/navigation. Deny camera permission and verify
+   file selection remains available. Camera requires localhost or HTTPS plus a
+   supported browser; it is not available on ordinary remote HTTP.
+3. Upload a fictional ID with a document type. Confirm Pending, mark Verified,
+   then Rejected. Replace the image and confirm Pending with cleared verification.
+4. Upload fictional signed consent evidence. Confirm existing consent is unchanged.
+   Reload and restart the backend with DynamoDB selected; images should persist.
+5. Repeat as Manager. As Staff, confirm only profile-photo controls appear and
+   work. With Staff authorization in local API docs, protected metadata/image/
+   upload/verification endpoints must return 403. Never share copied tokens.
+6. With a separately provisioned other-business user, direct requests for the
+   first customer's media must return 404 (or 403 for a conflicting business
+   query). Requests without authentication must return 401.
+7. Try a PDF/SVG, corrupted image and file over 5 MiB: reject without replacing
+   the current image. Using console object listings (no content in screenshots),
+   confirm replacement leaves the new object and deletes the old object after
+   success. A cleanup warning requires investigation rather than declaring the
+   old object deleted.
+
+Automated media tests use FakeS3, the in-process DynamoDB fake and boto3 Stubber,
+never real AWS. Frontend tests cover role categories, file validation, camera
+permission/unmount cleanup and authenticated binary transport. Live S3/browser
+acceptance remains a manual check.
+
+No AWS console change was made. The existing local SSO role must have
+`s3:PutObject`, `s3:GetObject`, `s3:DeleteObject` on this bucket's `businesses/*`
+objects, plus DynamoDB `GetItem`/`UpdateItem` and existing query/transaction
+permissions. Verify these permissions only if AWS reports access denied;
+any IAM change must be performed deliberately outside this application.
+Keep the existing private bucket settings. A shared backend IAM identity spans
+tenants; application authorization provides tenant isolation in this MVP.
+
+Production work still required: HTTPS, request/concurrency/rate limits, malware
+scanning policy, retention/deletion policy, orphan reconciliation, full audit
+logs, operational monitoring, stronger token/session revocation controls and
+privacy/GDPR review. Evaluate a production KMS encryption strategy later. There
+is **no facial recognition, biometric matching, OCR or automated identity
+verification**. Use fictional documents only; do not upload real customer ID
+images during development. No permanent customer/document deletion workflow or
+later milestone is implemented.

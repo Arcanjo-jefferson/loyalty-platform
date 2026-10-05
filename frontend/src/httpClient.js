@@ -4,7 +4,8 @@ export function createAuthenticatedClient({ base, getToken, onExpired, fetchRequ
     const expired = () => { onExpired(); return new Error('Your session has expired. Please sign in again.') }
     let token
     try { token = await getToken() } catch { throw expired() }
-    const send = value => fetchRequest(`${base}${path}`, { ...options, headers: { 'Content-Type': 'application/json', ...options.headers, Authorization: `Bearer ${value}` } })
+    const { responseType, ...fetchOptions } = options
+    const send = value => fetchRequest(`${base}${path}`, { ...fetchOptions, headers: { 'Content-Type': 'application/json', ...options.headers, Authorization: `Bearer ${value}` } })
     let response = await send(token)
     if (response.status === 401) {
       let refreshed
@@ -12,10 +13,11 @@ export function createAuthenticatedClient({ base, getToken, onExpired, fetchRequ
       response = await send(refreshed)
       if (response.status === 401) throw expired()
     }
+    if (response.ok && responseType === 'blob') return response.blob()
     const body = await response.json()
     if (!response.ok) {
       const message = Array.isArray(body.detail) ? body.detail.map(error => `${error.loc.at(-1)}: ${error.msg}`).join('; ') : body.detail || 'Unable to complete this request.'
-      throw new Error(message)
+      throw Object.assign(new Error(message), { status: response.status })
     }
     return body
   }

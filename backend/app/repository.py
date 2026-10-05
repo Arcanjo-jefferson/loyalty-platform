@@ -1,3 +1,4 @@
+from copy import deepcopy
 from datetime import datetime
 from threading import RLock
 from typing import Protocol
@@ -17,6 +18,9 @@ class ConcurrentModification(Exception):
 
 
 class CustomerRepository(Protocol):
+    def get_media(self, business_id: str, customer_id: str, kind: str) -> dict | None: ...
+    def save_media(self, business_id: str, customer_id: str, kind: str, metadata: dict, *, expected_revision: str | None) -> None: ...
+
     def list(self, business_id: str) -> list[Customer]: ...
     def get(self, business_id: str, customer_id: str) -> Customer | None: ...
     def save(self, customer: Customer, *, expected_updated_at: datetime | None = None) -> None:
@@ -29,6 +33,7 @@ class InMemoryCustomerRepository:
     def __init__(self):
         self._customers: dict[tuple[str, str], Customer] = {}
         self._lock = RLock()
+        self._media = {}
 
     def list(self, business_id):
         with self._lock:
@@ -50,3 +55,14 @@ class InMemoryCustomerRepository:
             if any(c.business_id == customer.business_id and c.phone == customer.phone and c.customer_id != customer.customer_id for c in self._customers.values()):
                 raise DuplicatePhone()
             self._customers[(customer.business_id, customer.customer_id)] = customer.model_copy(deep=True)
+
+    def get_media(self, business_id, customer_id, kind):
+        with self._lock:
+            return deepcopy(self._media.get((business_id, customer_id, kind)))
+
+    def save_media(self, business_id, customer_id, kind, metadata, *, expected_revision):
+        with self._lock:
+            current = self._media.get((business_id, customer_id, kind))
+            if (business_id, customer_id) not in self._customers or (current or {}).get('revision') != expected_revision:
+                raise ConcurrentModification()
+            self._media[(business_id, customer_id, kind)] = deepcopy(metadata)

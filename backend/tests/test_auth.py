@@ -73,7 +73,8 @@ class JWTVerificationTests(unittest.TestCase):
                 self.assertEqual(user.groups, tuple(groups))
 
     def test_identity_endpoint_with_signed_claims_and_401_403_distinction(self):
-        from main import create_app
+        with patch('app.config.build_repository'), patch('app.media_storage.build_media_storage'):
+            from main import create_app
         app = create_app(InMemoryCustomerRepository(), self.verifier)
         for group in ['owner', 'manager', 'staff', 'Owner', 'Manager', 'Staff']:
             status, identity = asyncio.run(request(app, path='/auth/me', token=self.token(self.claims(**{'custom:business_id': 'trumps', 'cognito:groups': [group]}))))
@@ -145,7 +146,7 @@ class JWTVerificationTests(unittest.TestCase):
 
 class AuthorizationAPITests(unittest.TestCase):
     def setUp(self):
-        with patch('app.config.build_repository'):
+        with patch('app.config.build_repository'), patch('app.media_storage.build_media_storage'):
             from main import create_app
         self.repo = InMemoryCustomerRepository()
         self.verifier = Mock()
