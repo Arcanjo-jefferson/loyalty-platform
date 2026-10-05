@@ -35,5 +35,5 @@ class CustomerService:
         if old.marketing_consent != data.marketing_consent:
             consent_time = now
         customer = old.model_copy(update={**data.model_dump(), 'consent_timestamp': consent_time, 'updated_at': now})
-        self.repository.save(customer)
+        self.repository.save(customer, expected_updated_at=old.updated_at)
         return customer
