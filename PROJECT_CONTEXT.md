@@ -60,12 +60,15 @@ Region:
 
 eu-west-1 (Ireland)
 
+Implemented AWS integrations:
+
+- DynamoDB customer persistence
+- Cognito business-user authentication
+
 Planned AWS architecture:
 
-- DynamoDB
 - Lambda
 - API Gateway
-- Cognito
 - S3
 - CloudFront
 - EventBridge
@@ -221,7 +224,7 @@ Business logic and API routes should not depend directly on DynamoDB.
 
 Storage implementations should conform to the repository abstraction.
 
-Current/planned implementations:
+Current implementations:
 
 - In-memory repository
 - DynamoDB repository
@@ -284,53 +287,95 @@ Voucher history must be preserved.
 
 # Authentication and Roles
 
-Authentication will eventually use Amazon Cognito.
+Authentication now uses Amazon Cognito for the current customer API.
 
 Cognito authenticates BUSINESS USERS, not loyalty customers.
 
-Planned roles:
+The following authorization model is finalized. Milestone 3 implements
+authentication, role guards and current customer permissions. Permissions for
+documents, SMS, visits, vouchers, staff administration and reports remain
+requirements for future endpoints, not implemented functionality.
 
-## Owner / Admin
-
-Can:
-
-- manage business configuration
-- manage staff
-- manage customers
-- send campaigns
-- view reports
-- manage loyalty configuration
-- manage vouchers
-
-## Manager
+## OWNER / ADMIN
 
 Can:
 
-- manage customers
-- send SMS
-- record visits
-- manage/redeem vouchers
-- view appropriate reports
+- Fully manage customers
+- View customer profile photos
+- View and verify customer ID documents
+- View consent evidence
+- Access QR, visit and voucher functionality
+- Send SMS campaigns
+- View reports and full audit logs
+- Manage staff accounts and roles
+- Configure the loyalty programme
+- Manage business settings
 
-## Staff
-
-Simplified access.
+## MANAGER
 
 Can:
 
-- scan customer QR
-- find customer
-- view necessary loyalty information
-- record visit
-- check voucher
-- redeem voucher
+- Register, view, search and edit customers
+- Deactivate customers
+- View customer profile photos
+- View and verify customer ID document images
+- View signed consent evidence
+- Scan QR codes
+- Record visits
+- View loyalty progress
+- View and redeem vouchers
+- Send individual and bulk SMS
+- View campaign history
+- View operational reports
+- View appropriate, limited audit information
 
-Staff should not automatically receive access to sensitive customer documents
-or administrative functionality.
+Cannot:
 
-Each staff member should have an individual account.
+- Manage staff accounts or roles
+- Change business or security settings
+- Change owner-level configuration
 
-Shared staff accounts should be avoided because actions need to be auditable.
+## STAFF
+
+Can:
+
+- Register customers
+- View and search customers
+- Edit customer details
+- View customer profile photos
+- Scan customer QR codes
+- Record visits
+- View loyalty progress
+- View and redeem vouchers
+
+Cannot:
+
+- View customer ID document images
+- View signed consent evidence
+- Send SMS campaigns
+- Manage staff accounts or roles
+- Access business settings or administrative reports
+
+## Enforcement and Business Isolation
+
+Backend authorization must enforce these permissions for every protected
+operation and resource access. Hiding functionality in React alone is not
+sufficient.
+
+Every authenticated business user must belong to a `business_id`. Users from
+one business must never access another business's resources, regardless of
+role. OWNER / ADMIN privileges apply within the user's business; they do not
+grant cross-business access.
+
+Business scope must be derived from the authenticated user's trusted
+identity/session, not accepted as authorization from frontend input.
+
+Each business user, including each staff member, should have an individual
+account. Shared accounts should be avoided because actions need to be
+attributed to an authenticated user.
+
+Staff customer edits must eventually be auditable, including the authenticated
+user, customer, timestamp and relevant changed fields, scoped to the business.
 
 ---
 
@@ -374,7 +419,11 @@ Possible verification states:
 
 Sensitive documents must have restricted access.
 
-Do not expose ID documents to all staff.
+OWNER / ADMIN and MANAGER may view and verify customer ID documents and view
+signed consent evidence. STAFF must not access ID document images or signed
+consent evidence. Customer profile photos may be viewed by all three roles
+within their own business. Backend authorization must enforce this distinction,
+including any future private file retrieval.
 
 S3 objects should eventually use encryption, authorization controls and
 appropriate retention/deletion policies.
@@ -426,7 +475,7 @@ Never:
 - commit real customer information
 - expose sensitive ID documents publicly
 - put personal information inside QR codes
-- trust `business_id` supplied by the frontend once authentication exists
+- trust `business_id`, role or permissions supplied by the frontend
 
 Secrets must come from environment configuration or appropriate AWS secret
 management mechanisms.
@@ -450,8 +499,10 @@ Staff
 Campaign
 Document
 
-Eventually `business_id` must come from the authenticated business user's
-identity/session rather than being trusted from frontend input.
+Every authenticated business user must belong to a `business_id`. Business
+scope comes from the user's verified identity/session rather than being trusted
+from frontend input. Cross-business
+resource access must be denied for every role.
 
 During local development, `"trumps"` may be used as the development business.
 
@@ -477,6 +528,18 @@ Audit information should include where appropriate:
 - action
 - resource
 - timestamp
+
+Customer edits by STAFF must record at least:
+
+- business_id
+- authenticated user ID
+- customer ID
+- timestamp
+- relevant changed fields
+
+OWNER / ADMIN may view full audit logs within their business. MANAGER may view
+appropriate, limited audit information. STAFF must not gain administrative
+report or audit access simply because they can edit customers.
 
 ---
 
@@ -505,7 +568,7 @@ Milestone 1 initially used temporary in-memory storage.
 
 ---
 
-# Milestone 2 — IMPLEMENTED; LIVE AWS VERIFICATION PENDING
+# Milestone 2 — COMPLETE; LIVE DYNAMODB VERIFIED BY PROJECT OWNER
 
 Goal:
 
@@ -538,19 +601,40 @@ no mode is configured and loses records on process restart. AWS failures do
 not automatically fall back to memory.
 
 Automated verification uses mocks/fakes/stubs, not the real AWS account.
-Live table schema, permissions and restart persistence still require the
-manual acceptance procedure documented in README.md. Do not consider live
-AWS verification complete until that procedure succeeds.
+The project owner reports successful manual AWS DynamoDB persistence
+verification. Automated tests continue using fakes/stubs without AWS access.
 
 Document metadata extensibility is preserved; no document/S3 functionality
-or other later milestone has been implemented.
+or other document/loyalty/messaging milestone has been implemented.
 
 ---
 
-# Future Milestones
+# Milestone 3 — IMPLEMENTED; LIVE COGNITO ACCEPTANCE PENDING
 
-## Milestone 3
-Cognito authentication and staff roles
+- Cognito email/password business-user login with Amplify SRP authentication
+- Temporary-password completion, per-tab session storage, refresh and logout
+- Backend RS256 JWT verification against configured Cognito JWKS
+- Required ID-token issuer, audience/client, expiry, issued-at, subject and token type
+- Trusted user context: subject, email where available, business, groups and role
+- Explicit Cognito group mapping for owner, manager and staff with ASCII case normalization; precedence Owner > Manager > Staff
+- Business scope always derives from verified custom:business_id
+- Customer endpoints protected for all three roles; only Owner/Manager change status
+- Reusable owner-only, management and customer-access authorization helpers
+- Frontend role awareness based on authenticated /auth/me response
+- Missing business or recognized group denied; no production authentication bypass
+- Automated JWT/tenant/role tests use local keys and injected test fixtures
+
+The public app client must read custom:business_id but MUST NOT be permitted
+to write it. Administrative provisioning assigns business membership. No AWS
+resources are automatically created or modified. App client ID is required
+configuration; there is no hardcoded client secret, token or user identity.
+
+Live Cognito login acceptance still requires the manual README procedure.
+Customer edit audit persistence, production MFA/recovery, immediate token
+revocation enforcement and deployment hardening remain future work. ID tokens
+already issued remain valid until expiry under local JWT verification.
+
+# Future Milestones
 
 ## Milestone 4
 Private S3 document storage and webcam capture

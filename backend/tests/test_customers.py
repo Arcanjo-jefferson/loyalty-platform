@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 from concurrent.futures import ThreadPoolExecutor
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from urllib.parse import parse_qs, urlsplit
 
 
 class CustomerAPITests(unittest.TestCase):
@@ -19,7 +20,7 @@ class CustomerAPITests(unittest.TestCase):
             sock.bind(('127.0.0.1', 0))
             port = sock.getsockname()[1]
         cls.base = f'http://127.0.0.1:{port}'
-        cls.server = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env={**os.environ, 'CUSTOMER_REPOSITORY': 'memory'})
+        cls.server = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'auth_test_server:app', '--app-dir', 'tests', '--host', '127.0.0.1', '--port', str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env={**os.environ, 'CUSTOMER_REPOSITORY': 'memory'})
         for _ in range(100):
             try:
                 urlopen(cls.base + '/health', timeout=1).close()
@@ -35,7 +36,7 @@ class CustomerAPITests(unittest.TestCase):
         cls.server.wait(timeout=5)
 
     def request(self, method, path, data=None):
-        req = Request(self.base + path, data=json.dumps(data).encode() if data is not None else None, headers={'Content-Type': 'application/json'}, method=method)
+        req = Request(self.base + path, data=json.dumps(data).encode() if data is not None else None, headers={'Content-Type': 'application/json', 'Authorization': 'Bearer fixture:' + parse_qs(urlsplit(path).query).get('business_id', ['trumps'])[0]}, method=method)
         try:
             response = urlopen(req, timeout=5)
         except HTTPError as error:
@@ -82,7 +83,7 @@ class CustomerAPITests(unittest.TestCase):
             with self.subTest(changes=changes):
                 self.assertEqual(self.request('POST', '/customers', self.payload(**changes))[0], 422)
         self.assertEqual(self.request('POST', '/customers', {})[0], 422)
-        self.assertEqual(self.request('GET', '/customers?business_id=')[0], 422)
+        self.assertEqual(self.request('GET', '/customers?business_id=')[0], 403)
 
     def test_irish_mobile_normalization(self):
         for business, phone in [('national', '0871234567'), ('international', '+353871234567'), ('formatted', '087 123 4567')]:

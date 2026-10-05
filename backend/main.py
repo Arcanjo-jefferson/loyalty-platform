@@ -3,15 +3,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.config import Settings, build_repository
 from app.repository import ConcurrentModification, DuplicatePhone, StorageUnavailable
-from app.routes import router
+from app.routes import identity_router, router
+from app.auth import CognitoVerifier
 from app.service import CustomerNotFound, CustomerService
 
 
-def create_app(repository=None):
-    app = FastAPI(title='Loyalty Platform API', version='0.3.0')
+def create_app(repository=None, token_verifier=None):
+    app = FastAPI(title='Loyalty Platform API', version='0.4.0')
     app.state.customer_service = CustomerService(repository if repository is not None else build_repository(Settings.from_environment()))
-    app.add_middleware(CORSMiddleware, allow_origins=['http://localhost:5173', 'http://127.0.0.1:5173'], allow_methods=['GET', 'POST', 'PUT'], allow_headers=['Content-Type'])
+    app.add_middleware(CORSMiddleware, allow_origins=['http://localhost:5173', 'http://127.0.0.1:5173'], allow_methods=['GET', 'POST', 'PUT'], allow_headers=['Content-Type', 'Authorization'])
+    app.state.token_verifier = token_verifier if token_verifier is not None else CognitoVerifier.from_environment()
     app.include_router(router)
+    app.include_router(identity_router)
 
     @app.exception_handler(DuplicatePhone)
     async def duplicate_phone(request: Request, exc: DuplicatePhone):
@@ -31,7 +34,7 @@ def create_app(repository=None):
 
     @app.get('/')
     def root():
-        return {'message': 'Loyalty Platform API is running', 'version': '0.3.0'}
+        return {'message': 'Loyalty Platform API is running', 'version': '0.4.0'}
 
     @app.get('/health')
     def health():

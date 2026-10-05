@@ -221,7 +221,7 @@ async def asgi_get(app, path):
         return {'type': 'http.request', 'body': b'', 'more_body': False}
     async def send(message):
         messages.append(message)
-    await app({'type': 'http', 'asgi': {'version': '3.0'}, 'http_version': '1.1', 'method': 'GET', 'scheme': 'http', 'path': path, 'raw_path': path.encode(), 'query_string': b'', 'headers': [], 'server': ('test', 80), 'client': ('test', 1)}, receive, send)
+    await app({'type': 'http', 'asgi': {'version': '3.0'}, 'http_version': '1.1', 'method': 'GET', 'scheme': 'http', 'path': path, 'raw_path': path.encode(), 'query_string': b'', 'headers': [(b'authorization', b'Bearer fixture')], 'server': ('test', 80), 'client': ('test', 1)}, receive, send)
     status = next(m['status'] for m in messages if m['type'] == 'http.response.start')
     body = b''.join(m.get('body', b'') for m in messages if m['type'] == 'http.response.body')
     return status, json.loads(body)
@@ -235,6 +235,9 @@ class StorageHTTPErrorTests(unittest.TestCase):
         for error, expected in [(StorageUnavailable('raw AWS details'), 503), (ConcurrentModification('raw AWS details'), 409), (DuplicatePhone('raw AWS details'), 409)]:
             repository = Mock()
             repository.list.side_effect = error
-            status, body = asyncio.run(asgi_get(create_app(repository), '/customers'))
+            from app.auth import Role, UserContext
+            verifier = Mock()
+            verifier.verify.return_value = UserContext('fixture', None, 'test', ('Owner',), Role.OWNER)
+            status, body = asyncio.run(asgi_get(create_app(repository, verifier), '/customers'))
             self.assertEqual(status, expected)
             self.assertNotIn('raw AWS', json.dumps(body))

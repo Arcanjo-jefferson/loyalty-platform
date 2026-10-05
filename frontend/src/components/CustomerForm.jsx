@@ -3,7 +3,7 @@ import Notification from './Notification'
 import { birthDateError, irelandToday, latestAdultBirthDate, normalizeIrishMobile } from '../validation'
 const empty = { first_name: '', last_name: '', phone: '', date_of_birth: '', email: '', address: '', eircode: '', marketing_consent: false, status: 'active' }
 const fields = [['first_name', 'First name', 'text', true], ['last_name', 'Last name', 'text', true], ['phone', 'Phone', 'tel', true], ['date_of_birth', 'Date of birth', 'date', true], ['email', 'Email', 'email'], ['eircode', 'Eircode', 'text'], ['address', 'Address', 'text']]
-export default function CustomerForm({ customer, onSave, onCancel }) {
+export default function CustomerForm({ customer, onSave, onCancel, canChangeStatus = false }) {
   const [values, setValues] = useState(() => Object.fromEntries(Object.keys(empty).map(key => [key, customer?.[key] ?? empty[key]])))
   const [maxBirthDate] = useState(() => latestAdultBirthDate())
   const [saving, setSaving] = useState(false)
@@ -35,7 +35,7 @@ export default function CustomerForm({ customer, onSave, onCancel }) {
         {key === 'date_of_birth' && <small id="dob-help">Customer must be at least 18 years old.</small>}
         {['phone', 'date_of_birth'].includes(key) && <small id={`${key}-error`} className="field-error" role={fieldErrors[key] ? 'alert' : undefined}>{fieldErrors[key]}</small>}
       </label>)}
-      {customer && <label>Status<select value={values.status} onChange={e => setValues({ ...values, status: e.target.value })}><option value="active">Active</option><option value="inactive">Inactive</option></select></label>}
+      {customer && canChangeStatus && <label>Status<select value={values.status} onChange={e => setValues({ ...values, status: e.target.value })}><option value="active">Active</option><option value="inactive">Inactive</option></select></label>}
       </div>
       <label className="consent"><input type="checkbox" checked={values.marketing_consent} onChange={e => setValues({ ...values, marketing_consent: e.target.checked })} /><span><strong>Promotional SMS consent</strong><small>The customer agrees to receive promotional and marketing SMS from this business. Only select this when the customer has given permission.</small></span></label>
       <div className="form-actions"><button type="button" className="secondary" onClick={onCancel}>Cancel</button><button className="primary" type="submit">{saving ? 'Saving…' : customer ? 'Save changes' : 'Create customer'}</button></div>

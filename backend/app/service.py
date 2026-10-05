@@ -28,8 +28,12 @@ class CustomerService:
         self.repository.save(customer)
         return customer
 
-    def update(self, business_id: str, customer_id: str, data: CustomerInput):
-        old = self.get(business_id, customer_id)
+    def update(self, business_id: str, customer_id: str, data: CustomerInput, *, existing: Customer | None = None):
+        # Routes may pass the same scoped snapshot used for authorization. This
+        # prevents a status-changing race between authorization and persistence.
+        old = existing if existing is not None else self.get(business_id, customer_id)
+        if old.business_id != business_id or old.customer_id != customer_id:
+            raise CustomerNotFound()
         now = datetime.now(timezone.utc)
         consent_time = old.consent_timestamp
         if old.marketing_consent != data.marketing_consent:
