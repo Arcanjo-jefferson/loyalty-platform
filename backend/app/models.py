@@ -59,3 +59,14 @@ class Customer(CustomerInput):
     qr_token: str
     created_at: datetime
     updated_at: datetime
+
+
+class Visit(BaseModel):
+    business_id: str
+    visit_id: str
+    customer_id: str
+    visited_at: datetime
+    recorded_by: str
+    visit_number: int = Field(default=0, ge=0)
+    local_visit_date: date | None = None
+    business_timezone: str | None = None
