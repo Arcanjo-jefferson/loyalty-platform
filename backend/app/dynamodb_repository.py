@@ -7,10 +7,13 @@ from botocore.exceptions import BotoCoreError, ClientError
 from pydantic import TypeAdapter, ValidationError
 from datetime import datetime
 from .models import Customer, CustomerInput
-from .repository import ConcurrentModification, DuplicatePhone, StorageUnavailable
+from .repository import ConcurrentModification, DuplicatePhone, DuplicateQR, StorageUnavailable
 
 
-class DynamoDBCustomerRepository:
+from .loyalty_repository import DynamoLoyaltyMixin
+
+
+class DynamoDBCustomerRepository(DynamoLoyaltyMixin):
     PHONE_PREFIX = 'PHONE#'
     MAX_TRANSACTION_ATTEMPTS = 3
 
@@ -49,7 +52,7 @@ class DynamoDBCustomerRepository:
             raise StorageUnavailable() from exc
 
     def get(self, business_id, customer_id):
-        if customer_id.startswith(self.PHONE_PREFIX):
+        if customer_id.startswith((self.PHONE_PREFIX, 'QR#', 'VISIT#')):
             return None
         item = self._read_item(business_id, customer_id)
         return self._customer(item) if item and item.get('item_type') == 'CUSTOMER' else None
@@ -68,7 +71,7 @@ class DynamoDBCustomerRepository:
             page = self._call('query', **params)
             for raw in page.get('Items', []):
                 item = self._decode(raw)
-                if item.get('item_type') == 'CUSTOMER' and not item['customer_id'].startswith(self.PHONE_PREFIX):
+                if item.get('item_type') == 'CUSTOMER' and not item['customer_id'].startswith((self.PHONE_PREFIX, 'QR#', 'VISIT#')):
                     customers.append(self._customer(item))
             last_key = page.get('LastEvaluatedKey')
             if not last_key:
@@ -96,7 +99,7 @@ class DynamoDBCustomerRepository:
                 'Item': self._encode({**data, 'item_type': 'CUSTOMER'}),
                 'ConditionExpression': 'attribute_not_exists(#pk)',
                 'ExpressionAttributeNames': {'#pk': 'business_id'},
-            }}]
+            }}, self._qr_claim(customer)]
             changing_phone = True
         else:
             old = self.get(customer.business_id, customer.customer_id)
@@ -147,12 +150,17 @@ class DynamoDBCustomerRepository:
                         raise DuplicatePhone() from exc
                     if len(reason_codes) > 1 and reason_codes[1] == 'ConditionalCheckFailed':
                         raise ConcurrentModification() from exc
+                    if len(reason_codes) > 2 and 'Put' in transaction[2] and reason_codes[2] == 'ConditionalCheckFailed':
+                        raise DuplicateQR() from exc
                     if not reasons:
                         # Some SDK/service responses omit reasons. Read only the lock key,
                         # never scan or parse raw AWS error messages.
                         lock = self._read_item(customer.business_id, self.PHONE_PREFIX + customer.phone)
                         if claiming_phone and lock and lock.get('owner_customer_id') != customer.customer_id:
                             raise DuplicatePhone() from exc
+                        qr = self._read_item(customer.business_id, 'QR#' + customer.qr_token)
+                        if len(transaction) == 3 and 'Put' in transaction[2] and qr and qr.get('owner_customer_id') != customer.customer_id:
+                            raise DuplicateQR() from exc
                 conflict = code == 'TransactionConflictException' or (
                     code == 'TransactionCanceledException' and 'TransactionConflict' in reason_codes
                     and not any(reason not in {'None', 'TransactionConflict'} for reason in reason_codes)

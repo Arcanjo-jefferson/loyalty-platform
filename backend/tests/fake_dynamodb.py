@@ -36,14 +36,15 @@ class FakeDynamoDB:
     def query(self, **params):
         with self.lock:
             self.calls.append(('query', deepcopy(params)))
-            assert params['KeyConditionExpression'] == '#business = :business'
+            assert params['KeyConditionExpression'] in {'#business = :business', '#business = :business AND begins_with(#sk, :prefix)'}
             values = self.decode(params['ExpressionAttributeValues'])
             keys = sorted(key for key in self.items if key[0] == values[':business'])
+            if ':prefix' in values: keys = [key for key in keys if key[1].startswith(values[':prefix'])]
             if params.get('ExclusiveStartKey'):
                 after = self.key(self.decode(params['ExclusiveStartKey']))
                 keys = [key for key in keys if key > after]
             page_keys = keys[:self.page_size]
-            result = {'Items': [self.encode(deepcopy(self.items[key])) for key in page_keys if self.items[key].get('item_type') == values[':customer_type']]}
+            result = {'Items': [self.encode(deepcopy(self.items[key])) for key in page_keys if ':customer_type' not in values or self.items[key].get('item_type') == values[':customer_type']]}
             if len(keys) > len(page_keys):
                 last = page_keys[-1]
                 result['LastEvaluatedKey'] = self.encode({'business_id': last[0], 'customer_id': last[1]})
@@ -58,6 +59,15 @@ class FakeDynamoDB:
             return item is not None and item.get('owner_customer_id') == values[':owner']
         if expression == '#phone = :old_phone AND #updated = :expected AND #type = :customer_type':
             return item is not None and item.get('phone') == values[':old_phone'] and item.get('updated_at') == values[':expected'] and item.get('item_type') == values[':customer_type']
+        if expression == '#type = :type AND #qr = :qr':
+            return item is not None and item.get('item_type') == values[':type'] and item.get('qr_token') == values[':qr']
+        if expression == 'attribute_not_exists(#pk) OR (#type = :type AND #owner = :owner)':
+            return item is None or (item.get('item_type') == values[':type'] and item.get('owner_customer_id') == values[':owner'])
+        prefix = '#type = :type AND #status = :active AND '
+        if expression.startswith(prefix):
+            suffix = expression[len(prefix):]
+            assert suffix in {'attribute_not_exists(#count)', '#count = :expected'}
+            return item is not None and item.get('item_type') == values[':type'] and item.get('status') == values[':active'] and (('loyalty_total_visits' not in item) if suffix == 'attribute_not_exists(#count)' else item.get('loyalty_total_visits') == values[':expected'])
         raise AssertionError(f'Unsupported test expression: {expression}')
 
     def transact_write_items(self, **params):

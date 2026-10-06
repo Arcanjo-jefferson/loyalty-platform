@@ -249,7 +249,7 @@ Flow:
 4. Staff confirms the visit
 5. Visit is recorded
 
-Every visit must eventually record:
+Every visit now records:
 
 - customer
 - business
@@ -258,7 +258,7 @@ Every visit must eventually record:
 
 After 5 qualifying visits:
 
-- customer receives a €10 voucher
+- Milestone 5A reports a €10 reward earned; voucher issuance belongs to 5B
 - displayed loyalty progress returns to 0/5
 
 IMPORTANT:
@@ -293,7 +293,8 @@ Cognito authenticates BUSINESS USERS, not loyalty customers.
 
 The following authorization model is finalized. Milestone 3 implements
 authentication, role guards and current customer permissions. Milestone 4 implements protected customer media and manual ID verification.
-Permissions for SMS, visits, vouchers, staff administration and reports remain
+Milestone 5A implements QR lookup, visit confirmation and progress for all three roles.
+Permissions for SMS, vouchers, staff administration and reports remain
 requirements for future endpoints.
 
 ## OWNER / ADMIN
@@ -610,7 +611,7 @@ The project owner reports successful manual AWS DynamoDB persistence
 verification. Automated tests continue using fakes/stubs without AWS access.
 
 Milestone 2 preserved document metadata extensibility; Milestone 4 now adds
-S3 media. Loyalty and messaging remain unimplemented.
+S3 media. Milestone 5A now adds QR lookup and confirmed visits; vouchers and messaging remain unimplemented.
 
 ---
 
@@ -639,7 +640,7 @@ Customer edit audit persistence, production MFA/recovery, immediate token
 revocation enforcement and deployment hardening remain future work. ID tokens
 already issued remain valid until expiry under local JWT verification.
 
-# Milestone 4 — IMPLEMENTED; LIVE S3/BROWSER ACCEPTANCE PENDING
+# Milestone 4 — IMPLEMENTED; PROFILE-PHOTO S3 STORAGE/RETRIEVAL VERIFIED
 
 - Backend-controlled JPEG/PNG/WebP uploads, max 5 MiB and 20 million pixels
 - Pillow actual-format verification, full decode and fresh-pixel re-encoding;
@@ -669,12 +670,37 @@ remain required. Use fictional documents only. No OCR, facial recognition,
 biometric matching or automated document verification. See README for setup,
 permissions, endpoints and manual acceptance procedure.
 
+# Milestone 5A — IMPLEMENTED; LIVE QR/VISIT ACCEPTANCE PENDING
+
+- Business-scoped QR_LOCK index records; existing opaque tokens preserved
+- New customers atomically claim CUSTOMER, PHONE_LOCK and QR_LOCK
+- Explicit dry-run/apply backfill script for each existing business; no Scan,
+  GSI, automatic startup migration or AWS resource changes
+- Authenticated QR lookup never creates visits; only active customers resolve
+- Owner/Manager/Staff may explicitly confirm visits; recorded_by is Cognito sub
+- Immutable VISIT#<customer UUID>#<visit UUID> rows with retained history
+- One valid visit per business/customer/calendar date in Europe/Dublin, including DST
+- Atomic active-status/counter check plus visit insertion after strongly consistent
+  customer history read; concurrent commits retry and recheck the local date
+- UTC timestamp plus local_visit_date and business_timezone on new visits
+- Legacy timestamps establish local date without backfill; history/counts preserved
+- Both repositories enforce the daily rule; no rolling time-window configuration
+- Future Daily Raffle eligibility will share this rule; no raffle creation yet
+- Lifetime count, progress=count % 5, visits_until_reward=5-progress;
+  reward_earned true only for positive multiples of five
+- Fifth visit reports 0/5 progress and €10 reward earned; no voucher issued
+- Keyboard scanner lookup/confirm UI, profile photo and customer visit history
+- Internal records excluded from customer APIs; phone/media metadata preserved
+- Automated tests use local fakes and SDK stubs, never the real AWS account
+
+See README for endpoints, explicit backfill commands and live acceptance steps.
+No QR generation/printing, vouchers, birthday rewards, raffle/Epson integration
+or later milestone has been implemented. Full customer edit audit logs remain
+future work; visits retain their authenticated recorder and server timestamp.
+
 # Future Milestones
 
-## Milestone 5
-QR scanning and visit tracking
-
-## Milestone 6
+## Milestone 5B
 Voucher generation and redemption
 
 ## Milestone 7

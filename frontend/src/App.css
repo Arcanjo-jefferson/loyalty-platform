@@ -24,3 +24,16 @@
 .profile-avatar-block small { display: block; margin-top: 8px; color: #687386; font-size: 11px; }
 .profile-identity h2 { overflow-wrap: anywhere; }
 @media (max-width: 600px) { .profile-identity { gap: 16px; } .profile-avatar-block { flex-basis: 88px; width: 88px; } .profile-avatar { width: 88px; height: 88px; } }
+
+.visit-scanner { max-width: 850px; padding: 26px; }
+.visit-scanner form { display: flex; align-items: flex-end; gap: 16px; margin: 24px 0; }
+.visit-scanner label { display: grid; gap: 8px; flex: 1; min-width: 0; }
+.visit-scanner input { width: 100%; padding: 12px; border: 1px solid #d6dfdb; border-radius: 8px; font: inherit; }
+.visit-customer { border-top: 1px solid #e5e9e7; padding-top: 24px; }
+.visit-customer > button { margin: 8px 12px 8px 0; }
+.loyalty-progress { margin: 24px 0; }
+.loyalty-progress progress { display: block; width: 100%; height: 16px; margin: 12px 0; accent-color: #38745a; }
+.reward-earned { color: #276849; font-size: 22px; font-weight: 700; }
+.customer-visits { max-width: 850px; padding: 25px; margin-bottom: 20px; }
+.customer-visits li { margin: 8px 0; }
+@media (max-width: 600px) { .visit-scanner form { flex-direction: column; align-items: stretch; } .visit-scanner { padding: 20px; } }
