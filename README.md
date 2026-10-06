@@ -1,8 +1,8 @@
 # Loyalty Platform
 
-A local MVP for a future multi-business customer loyalty and SMS marketing platform. The project is designed to give managers a customer directory and, in later milestones, tools for recording visits, issuing rewards and communicating with customers who have opted into marketing.
+A local MVP for a future multi-business customer loyalty and SMS marketing platform. The project is designed to give managers a customer directory and, tools for recording visits and, in later milestones, issuing rewards and communicating with customers who have opted into marketing.
 
-**Current status: Milestones 1–3 completed and manually verified against AWS by the project owner; Milestone 4 implemented, awaiting live S3/browser acceptance testing.** The application runs locally with a React manager dashboard and a FastAPI customer API. Customer persistence is configurable between DynamoDB and an optional in-memory repository. Cognito business-user login and server-side role/tenant authorization are implemented. Private customer images, camera capture and ID verification are implemented. SMS sending and loyalty workflows remain planned. DynamoDB persistence was manually verified by the project owner.
+**Current status: Milestones 1–3 completed and manually verified against AWS by the project owner; Milestone 4 profile-photo storage/retrieval manually verified; Milestone 5A implemented, awaiting live QR/visit acceptance testing.** The application runs locally with a React manager dashboard and a FastAPI customer API. Customer persistence is configurable between DynamoDB and an optional in-memory repository. Cognito business-user login and server-side role/tenant authorization are implemented. Private customer images, camera capture and ID verification are implemented. QR lookup, explicit visit confirmation and loyalty progress are implemented. Voucher issuance and SMS sending remain planned. DynamoDB persistence was manually verified by the project owner.
 
 ## Implemented features
 
@@ -13,7 +13,7 @@ A local MVP for a future multi-business customer loyalty and SMS marketing platf
 - Irish mobile input with a visible Ireland `+353` indicator. National and international formats are normalized to E.164 by the backend before storage and per-business duplicate checks. Incomplete or malformed numbers are rejected. Validation checks format, not phone ownership or service availability.
 - Minimum age of 18 enforced in frontend and backend using the full birth date and the current date in `Europe/Dublin`. Invalid and future dates are rejected. February 29 birthdays reach the age threshold on March 1 in non-leap years.
 - Explicit promotional/marketing SMS consent, with a UTC timestamp for the most recent consent transition.
-- Secure UUID4 customer IDs and separate random, opaque `qr_token` values containing no personal data. Token generation is a data-model foundation only; QR rendering, scanning and loyalty are not implemented.
+- Secure UUID4 customer IDs and separate random, opaque `qr_token` values containing no personal data. Keyboard scanner lookup and confirmed visit tracking are implemented; QR rendering/printing remains planned.
 - Server-managed UTC creation/update timestamps and active/inactive customer status.
 - Successful registration and updates automatically open the customer's profile using the saved API response immediately. Reusable accessible notifications display `Customer registered successfully.` or `Customer details updated successfully.`
 - Failed submissions remain on the form, preserve entered values and show an error without success feedback.
@@ -111,11 +111,11 @@ The project owner has manually verified the existing DynamoDB persistence. The a
 
 Customer rows use their UUID as the sort key and `item_type=CUSTOMER`. Phone-lock rows use `PHONE#<normalized E.164 phone>` as the sort key, `item_type=PHONE_LOCK` and an `owner_customer_id`. Both records remain in the customer's business partition.
 
-- **Create:** one conditional transaction claims the phone lock and inserts the customer. A conflicting lock returns the existing user-friendly duplicate-phone error (409).
+- **Create:** one conditional transaction claims the phone and QR locks and inserts the customer. A conflicting lock returns the existing user-friendly duplicate-phone error (409).
 - **Update without a phone change:** a transaction verifies lock ownership and conditionally updates the customer.
 - **Phone change:** one transaction claims the new phone, conditionally updates the customer and releases the old lock after verifying ownership. Failure rolls back every action. The old phone becomes reusable only after a successful change.
 - **Concurrency:** the stored phone and expected update timestamp must match. A concurrent modification returns 409 rather than overwriting newer data. Transient transaction conflicts receive bounded retries with the same idempotency token.
-- **Reads:** `GetItem` uses both keys; listing uses a strongly consistent, paginated `Query` for one business. No table scan is used for reads or phone uniqueness. Lists filter `item_type=CUSTOMER` and defensively exclude `PHONE#` keys; direct lookup of a phone-lock key returns no customer.
+- **Reads:** `GetItem` uses both keys; listing uses a strongly consistent, paginated `Query` for one business. No table scan is used for reads or phone uniqueness. Lists filter `item_type=CUSTOMER` and defensively exclude `PHONE#`, `QR#` and `VISIT#` keys; direct lookup of a phone-lock key returns no customer.
 - **Serialization:** dates and UTC timestamps are ISO strings, consent is Boolean and optional empty fields are null. All existing customer fields are persisted. Storage-only fields are excluded from customer responses.
 - **Failures:** AWS/credential/network errors become a generic 503 response; raw AWS messages and stack traces are not returned to the frontend. There is no automatic fallback to memory.
 
@@ -310,7 +310,7 @@ Frontend tests cover phone/age validation, Ireland's calendar date, bearer attac
 - **Memory mode only:** records are process-local, start empty and are lost on restart/reload. Use one worker in this mode; different workers have separate records. There is no automatic migration between memory and DynamoDB.
 - Authentication and role/tenant checks are implemented, but this remains a local development application. The project owner has manually verified live Cognito login and tenant isolation. Browser sessions are JavaScript-readable, backend JWT validation does not immediately revoke already issued tokens, and production HTTPS, MFA, rate limiting and audit hardening remain outstanding.
 - Customer data is not saved to browser storage. The customer directory does not display internal IDs or QR tokens, although the API returns them.
-- SMS consent is recorded, but no messages are sent. There is no QR scanning, visit recording, loyalty counter, reward issuance, voucher redemption or historical audit workflow.
+- SMS consent is recorded, but no messages are sent. QR lookup, confirmed visits and loyalty progress are implemented; voucher issuance/redemption and full historical audit logs remain planned.
 
 ## First real DynamoDB persistence test
 
@@ -342,14 +342,13 @@ Live Cognito acceptance has not been performed by the automated tests; no real u
 
 ## Planned development roadmap
 
-Milestone 2 persistence has been manually verified by the project owner. Milestone 3 Cognito integration and current customer authorization are manually verified. Milestone 4 private S3 media is implemented, pending live S3/browser acceptance testing. The following later milestones are **not implemented**, following `PROJECT_CONTEXT.md`:
+Milestone 2 persistence has been manually verified by the project owner. Milestone 3 Cognito integration and current customer authorization are manually verified. Milestone 4 profile-photo storage/retrieval is manually verified. Milestone 5A QR lookup and visit tracking is implemented; live acceptance is pending. The following later milestones are **not implemented**, following `PROJECT_CONTEXT.md`:
 
-- **Milestone 5:** QR scanning and confirmed visit tracking with preserved visit history.
-- **Milestone 6:** unique €10 vouchers after five visits, progress reset to 0/5 without deleting historical visits, and single-use redemption.
+- **Milestone 5B:** €10 voucher generation after five visits and single-use redemption.
 - **Milestone 7:** Twilio messaging, consent-aware campaigns and scheduled birthday promotions.
 - **Milestone 8:** audit/security/privacy hardening and production deployment, including future Lambda/API Gateway and hosting infrastructure.
 
-Exact boundaries may evolve. No QR loyalty, vouchers, Twilio, birthday automation or Lambda deployment is included in the current implementation.
+Exact boundaries may evolve. No vouchers, Twilio, birthday automation or Lambda deployment is included in the current implementation.
 
 ### Retrying a temporary-password sign-in
 
@@ -568,3 +567,125 @@ is **no facial recognition, biometric matching, OCR or automated identity
 verification**. Use fictional documents only; do not upload real customer ID
 images during development. No permanent customer/document deletion workflow or
 later milestone is implemented.
+
+
+## Milestone 5A: QR lookup and confirmed visits
+
+Owner, Manager and Staff can open **Loyalty visits**, scan/type an opaque QR token
+as keyboard input, look up the active customer, and explicitly **Confirm visit**.
+Lookup never records a visit. The profile photo uses the existing authenticated
+binary transport; ID and consent images are not automatically displayed.
+Customer profiles also display progress and retained visit history.
+
+Authenticated endpoints (business comes exclusively from verified Cognito):
+
+- `POST /loyalty/lookup` with `{"qr_token":"<opaque token>"}`.
+- `POST /customers/{customer_id}/visits` with `{}`; server assigns UUID, UTC time
+  and `recorded_by` from the authenticated Cognito `sub`.
+- `GET /customers/{customer_id}/visits` returns customer, history and progress.
+
+QR locks use `customer_id=QR#<token>`, `item_type=QR_LOCK` and `owner_customer_id`.
+Immutable visit rows use `VISIT#<customer UUID>#<visit UUID>`, `item_type=VISIT`,
+and `owner_customer_id`. The composite opaque prefix enables paginated,
+customer-specific history Queries without a Scan or new GSI. Internal records
+never appear as customers. New registrations atomically claim both indexes;
+existing QR tokens are never rotated by migration.
+
+One valid loyalty visit is allowed per customer per calendar date in the
+server-owned business timezone, currently `Europe/Dublin`. Python zoneinfo
+handles DST; this is not a rolling 24-hour restriction. New visit rows store
+UTC `visited_at`, `local_visit_date` and `business_timezone`.
+
+Before confirmation the repository reads the lifetime counter, then uses a
+strongly consistent paginated Query of that customer's retained history to
+check the Dublin date. The transaction checks active status and the expected
+counter, updates only the lifetime count, and inserts the immutable visit.
+If another request commits first, the counter condition fails and the repository
+re-reads history. Thus simultaneous requests cannot accept the same local date.
+This queries one customer's history, never a table Scan; read cost grows with
+that customer's history and a future date index could improve scale.
+
+Same-date confirmation returns 409 with
+`A loyalty visit has already been recorded for this customer today.`
+The frontend displays this message without success feedback. Rejection changes
+neither the count nor history. Customer edits preserve loyalty/media metadata.
+There is no cooldown setting. The date rule will also inform future Daily Raffle
+eligibility, but no raffle entry or voucher is created here.
+
+Threshold is five: `progress=total_visits % 5`, `visits_until_reward=5-progress`,
+`reward_earned=total_visits > 0 and progress == 0`. Visit five returns 5/0/5/true;
+visit six returns 6/1/4/false. History is never deleted. The UI shows **€10 reward
+earned** at a completed cycle, but no voucher is created or issued in 5A.
+History and counter are separate strongly consistent reads, so a concurrent
+confirmation can briefly make their snapshots differ; refresh retrieves current data.
+Memory mode supports the same workflow but loses customer/index/visit data on restart.
+
+### Explicit QR-lock backfill for existing customers
+
+No table/index/resource creation or automatic startup migration occurs. Run this
+once per existing business using the normal backend environment and AWS SSO
+profile. The script defaults to a read-only dry run, validates all candidates
+before writing, and uses guarded transactions to preserve tokens and reject
+conflicting ownership. It prints counts rather than customer data or QR tokens.
+Use the existing table configuration below; commands run from `backend/`:
+
+```bash
+source venv/bin/activate
+aws sso login --profile loyalty-dev
+export CUSTOMER_REPOSITORY=dynamodb
+export AWS_PROFILE=loyalty-dev
+export AWS_REGION=eu-west-1
+export DYNAMODB_CUSTOMERS_TABLE=loyalty-customer-dev
+python scripts/backfill_qr_locks.py --business trumps
+# Review counts; this next command deliberately writes QR_LOCK records.
+python scripts/backfill_qr_locks.py --business trumps --apply
+python scripts/backfill_qr_locks.py --business trumps
+```
+
+The final dry run should report zero missing locks. Rerunning is idempotent.
+If interrupted or a concurrent change fails a guard, completed locks remain;
+resolve the reported conflict and rerun. Do not edit or rotate existing tokens.
+No migration of phone locks or media is performed. The IAM identity needs the
+existing table's GetItem, Query and transactional write permissions; the script
+never changes IAM or table settings.
+
+Restart the backend/frontend, log in, and use a fictional active customer's
+existing token in **Loyalty visits**. Confirm lookup leaves the count unchanged,
+confirmation adds exactly one visit, an immediate retry is rejected, and visit
+five displays the reward with all five history records retained. Wait until the next Dublin calendar date between valid confirmations. Verify an inactive
+customer and a different-business user cannot record/access that customer's visits.
+Automated loyalty tests use fakes/stubs and require no real AWS account.
+
+
+### Existing visits and daily-rule acceptance
+
+No visit backfill is required. Existing visit timestamps are converted to Dublin
+calendar dates on read, including rows without the new local-date fields. An
+existing visit today immediately prevents another visit today after the new
+backend starts. Stored history and lifetime counts are preserved; historical
+multiple visits permitted by the former rule are not deleted or reclassified.
+Any obsolete timestamp metadata on customer rows is inert and can remain.
+Remove the obsolete visit cooldown environment entry from your local `.env`.
+Stop all old backend processes before restarting so they cannot accept visits
+under the previous rule. No DynamoDB schema/IAM/resource changes are needed.
+
+For live acceptance with the existing development customer:
+
+1. Start the backend with the existing DynamoDB/Cognito/S3 environment and
+   `aws sso login --profile loyalty-dev`; run `uvicorn main:app --reload` from
+   `backend/` with its venv active. Run `npm run dev` from `frontend/`.
+2. Log in, open the customer's profile and note count/history, then open
+   **Loyalty visits** and scan/type the existing QR token. Lookup must leave
+   count/history unchanged.
+3. If today's Dublin visit already exists, **Confirm visit** must return the
+   friendly duplicate message; reload the profile and verify unchanged values.
+   Two tabs confirming concurrently must both reject if today's visit exists.
+4. After the next Dublin midnight, look up and confirm once: count increases by
+   one. An immediate retry must reject. On a date with no previous visit, two
+   tabs confirming concurrently must produce exactly one successful visit.
+5. Check UTC timestamp plus local date/timezone in the authenticated visit API
+   response using the browser Network panel. Do not copy or expose tokens.
+   A 23:55 visit followed by 00:05 on the next local date is allowed; automated
+   tests cover that boundary and both DST transitions without changing clocks.
+6. Across five distinct valid dates, progress reaches 0/5 with reward earned;
+   the sixth reaches 1/5. All history remains and no voucher is issued.
