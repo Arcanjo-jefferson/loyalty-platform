@@ -16,3 +16,11 @@
 .media-file input { max-width: 100%; font: inherit; }
 .media-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
 @media (max-width: 600px) { .media-card { padding: 18px; } .media-actions button { flex: 1; } }
+
+.profile-identity { display: flex; align-items: center; gap: 22px; min-width: 0; }
+.profile-avatar-block { flex: 0 0 120px; width: 120px; text-align: center; }
+.profile-avatar { display: block; width: 120px; height: 120px; border-radius: 50%; object-fit: cover; background: #f0f2f7; }
+.profile-avatar-placeholder { display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 600; color: #6355a5; }
+.profile-avatar-block small { display: block; margin-top: 8px; color: #687386; font-size: 11px; }
+.profile-identity h2 { overflow-wrap: anywhere; }
+@media (max-width: 600px) { .profile-identity { gap: 16px; } .profile-avatar-block { flex-basis: 88px; width: 88px; } .profile-avatar { width: 88px; height: 88px; } }

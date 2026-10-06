@@ -6,11 +6,11 @@ import ImageCapture from './ImageCapture'
 import Notification from './Notification'
 
 const titles = { 'profile-photo': 'Profile photo', 'id-document': 'Identity document', 'consent-evidence': 'Consent evidence' }
-export default function CustomerMedia({ customer }) {
+export default function CustomerMedia({ customer, onProfilePhotoSaved }) {
   const { user } = useAuth()
-  return <div className="customer-media">{mediaCategories(user.role).map(kind => <MediaCard key={`${customer.customer_id}:${kind}`} customer={customer} kind={kind} />)}</div>
+  return <div className="customer-media">{mediaCategories(user.role).map(kind => <MediaCard key={`${customer.customer_id}:${kind}`} customer={customer} kind={kind} onProfilePhotoSaved={onProfilePhotoSaved} />)}</div>
 }
-function MediaCard({ customer, kind }) {
+function MediaCard({ customer, kind, onProfilePhotoSaved }) {
   const [metadata, setMetadata] = useState(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -52,7 +52,9 @@ function MediaCard({ customer, kind }) {
       const query = kind === 'id-document' ? `?document_type=${encodeURIComponent(documentType)}` : ''
       const saved = await customerRequest(path + query, { method: 'POST', body: file, headers: { 'Content-Type': file.type }, cache: 'no-store' })
       if (requestGeneration.current !== attempt) return
-      clearImage(); setMetadata(saved); setFile(null); setReset(value => value + 1)
+      clearImage(); setMetadata(saved);
+      if (kind === 'profile-photo') onProfilePhotoSaved?.(saved)
+      setFile(null); setReset(value => value + 1)
       setNotice(saved.cleanup_pending ? 'Image saved. Previous image cleanup is pending; contact your administrator.' : `${titles[kind]} saved successfully.`)
     } catch (err) { if (requestGeneration.current === attempt) setError(err.message === 'Failed to fetch' ? 'Cannot reach the API. Please try again.' : err.message) }
     finally { if (requestGeneration.current === attempt) setBusy(false) }

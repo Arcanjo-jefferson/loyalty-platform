@@ -484,7 +484,13 @@ Image/metadata responses use `Cache-Control: no-store`; images also use
 `nosniff` and no-referrer. React fetches image bytes with the existing Bearer
 transport, creates temporary local blob URLs and revokes them when hidden,
 replaced or unmounted. No persistent document images are saved to browser
-storage. Viewing requires clicking “View current image”. Authorized users can
+storage. Profile photos load automatically beside the customer’s name using the
+authenticated image endpoint, with initials for missing photos and a retry
+control for retrieval failures. Successful profile-photo replacement refreshes
+the displayed avatar. Protected ID and consent images still require clicking
+“View current image”. Customer-list/dashboard thumbnails retain initials: the
+list API has no photo-presence flag or thumbnail endpoint, so fetching full
+images per row would add avoidable requests and bandwidth. Authorized users can
 still save or photograph what they view; browser controls cannot prevent this.
 
 ### Local configuration and acceptance test
