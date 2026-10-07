@@ -37,3 +37,14 @@
 .customer-visits { max-width: 850px; padding: 25px; margin-bottom: 20px; }
 .customer-visits li { margin: 8px 0; }
 @media (max-width: 600px) { .visit-scanner form { flex-direction: column; align-items: stretch; } .visit-scanner { padding: 20px; } }
+
+.vouchers { margin-bottom: 20px; }
+.voucher-state { margin-top: 12px; color: #60726a; font-weight: 600; }
+.voucher-state-redeemed { color: #276849; }
+.vouchers form { display: flex; gap: 1rem; align-items: end; flex-wrap: wrap; margin-bottom: 1rem; }
+.vouchers label { display: grid; gap: .5rem; flex: 1; min-width: 12rem; }
+.vouchers input { padding: .8rem; border: 1px solid #d5dfd9; border-radius: .5rem; }
+.voucher-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 1rem; margin-top: 1rem; }
+.voucher-card { border: 1px solid #d5dfd9; border-radius: .75rem; padding: 1rem; }
+.voucher-card dl > div { margin: .6rem 0; }.voucher-card dd { margin: .2rem 0; overflow-wrap: anywhere; }
+.voucher-code { font-family: monospace; font-size: 1.1rem; }.voucher-card dt { color: #60726a; font-size: .85rem; }

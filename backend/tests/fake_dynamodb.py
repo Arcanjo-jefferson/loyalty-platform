@@ -63,9 +63,14 @@ class FakeDynamoDB:
             return item is not None and item.get('item_type') == values[':type'] and item.get('qr_token') == values[':qr']
         if expression == 'attribute_not_exists(#pk) OR (#type = :type AND #owner = :owner)':
             return item is None or (item.get('item_type') == values[':type'] and item.get('owner_customer_id') == values[':owner'])
+        if expression == '#type = :type AND #status = :active AND #expiry > :instant':
+            return item is not None and item.get('item_type') == values[':type'] and item.get('status') == values[':active'] and item.get('expires_at_micros', 0) > values[':instant']
         prefix = '#type = :type AND #status = :active AND '
         if expression.startswith(prefix):
             suffix = expression[len(prefix):]
+            if suffix.endswith(' AND #updated = :updated'):
+                if item is None or item.get('updated_at') != values[':updated']: return False
+                suffix = suffix.removesuffix(' AND #updated = :updated')
             assert suffix in {'attribute_not_exists(#count)', '#count = :expected'}
             return item is not None and item.get('item_type') == values[':type'] and item.get('status') == values[':active'] and (('loyalty_total_visits' not in item) if suffix == 'attribute_not_exists(#count)' else item.get('loyalty_total_visits') == values[':expected'])
         raise AssertionError(f'Unsupported test expression: {expression}')

@@ -1,0 +1,6 @@
+.panel.vouchers > .vouchers-content { padding: 25px; }
+.vouchers-content > h2 { margin: 0 0 16px; }
+.vouchers-content > .voucher-grid { margin-top: 16px; }
+@media (max-width: 600px) {
+  .panel.vouchers > .vouchers-content { padding: 20px; }
+}

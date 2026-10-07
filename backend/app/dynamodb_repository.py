@@ -11,9 +11,10 @@ from .repository import ConcurrentModification, DuplicatePhone, DuplicateQR, Sto
 
 
 from .loyalty_repository import DynamoLoyaltyMixin
+from .voucher_repository import DynamoVoucherMixin
 
 
-class DynamoDBCustomerRepository(DynamoLoyaltyMixin):
+class DynamoDBCustomerRepository(DynamoLoyaltyMixin, DynamoVoucherMixin):
     PHONE_PREFIX = 'PHONE#'
     MAX_TRANSACTION_ATTEMPTS = 3
 
@@ -52,7 +53,7 @@ class DynamoDBCustomerRepository(DynamoLoyaltyMixin):
             raise StorageUnavailable() from exc
 
     def get(self, business_id, customer_id):
-        if customer_id.startswith((self.PHONE_PREFIX, 'QR#', 'VISIT#')):
+        if customer_id.startswith((self.PHONE_PREFIX, 'QR#', 'VISIT#', 'VOUCHER#', 'VCODE#', 'REWARD#')):
             return None
         item = self._read_item(business_id, customer_id)
         return self._customer(item) if item and item.get('item_type') == 'CUSTOMER' else None
@@ -71,7 +72,7 @@ class DynamoDBCustomerRepository(DynamoLoyaltyMixin):
             page = self._call('query', **params)
             for raw in page.get('Items', []):
                 item = self._decode(raw)
-                if item.get('item_type') == 'CUSTOMER' and not item['customer_id'].startswith((self.PHONE_PREFIX, 'QR#', 'VISIT#')):
+                if item.get('item_type') == 'CUSTOMER' and not item['customer_id'].startswith((self.PHONE_PREFIX, 'QR#', 'VISIT#', 'VOUCHER#', 'VCODE#', 'REWARD#')):
                     customers.append(self._customer(item))
             last_key = page.get('LastEvaluatedKey')
             if not last_key:

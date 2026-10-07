@@ -1,3 +1,4 @@
+import { rewardMessages } from './voucherFlow.js'
 // Lookup never records a visit; the separate confirmation call is explicit.
 export function createVisitFlow({ request }) {
   let snapshot = { stage: 'idle', result: null, error: '', notice: '' }
@@ -30,7 +31,7 @@ export function createVisitFlow({ request }) {
       publish({ stage: 'confirming', result: before, error: '', notice: '' })
       try {
         const result = await request(`/customers/${encodeURIComponent(before.customer.customer_id)}/visits`, { method: 'POST', body: '{}', cache: 'no-store' })
-        if (generation === attempt) publish({ stage: 'confirmed', result, error: '', notice: result.reward_earned ? 'Visit recorded successfully. €10 reward earned.' : 'Visit recorded successfully.' })
+        if (generation === attempt) publish({ stage: 'confirmed', result, error: '', notice: ['Visit recorded successfully.', ...rewardMessages(result.vouchers)].join(' ') })
       } catch (error) {
         if (generation === attempt) publish({ stage: 'ready', result: before, error: error.message === 'Failed to fetch' ? 'Cannot reach the API. Please try again.' : error.message, notice: '' })
       }
