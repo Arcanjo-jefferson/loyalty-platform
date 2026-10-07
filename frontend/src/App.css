@@ -48,3 +48,11 @@
 .voucher-card { border: 1px solid #d5dfd9; border-radius: .75rem; padding: 1rem; }
 .voucher-card dl > div { margin: .6rem 0; }.voucher-card dd { margin: .2rem 0; overflow-wrap: anywhere; }
 .voucher-code { font-family: monospace; font-size: 1.1rem; }.voucher-card dt { color: #60726a; font-size: .85rem; }
+
+.customer-qr { padding: 25px; margin-bottom: 20px; max-width: 850px; }
+.customer-qr h2 { margin-bottom: 12px; }.customer-qr p { margin: 10px 0; }
+.loyalty-qr-image { display: block; width: min(100%, 300px); height: auto; margin: 20px 0; image-rendering: pixelated; }
+.qr-actions { display: flex; flex-wrap: wrap; gap: 12px; }.qr-help { color: #60726a; font-size: 13px; }
+.qr-confirm { padding: 16px; border: 1px solid #d5dfd9; border-radius: 8px; margin-top: 16px; }.qr-confirm button { margin: 8px 8px 0 0; }
+.public-qr { max-width: 440px; margin: 20px auto; padding: 16px; }.public-qr .loyalty-qr-image { margin: 20px auto; }
+@media (max-width: 600px) { .customer-qr { padding: 20px; } }

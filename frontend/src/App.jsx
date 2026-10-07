@@ -7,6 +7,7 @@ import CustomerForm from './components/CustomerForm'
 import CustomerProfile from './components/CustomerProfile'
 import Notification from './components/Notification'
 import CustomerTable from './components/CustomerTable'
+import { searchCustomers } from './customerSearch'
 import { formatDate } from './format'
 import './App.css'
 
@@ -65,7 +66,7 @@ export default function App() {
     }
     navigate(`/customers/${saved.customer_id}`)
   }
-  const filtered = customers.filter(c => `${c.first_name} ${c.last_name} ${c.phone}`.toLowerCase().includes(search.toLowerCase()))
+  const filtered = searchCustomers(customers, search)
   const birthdays = customers.filter(c => Number(c.date_of_birth.slice(5, 7)) === today.getMonth() + 1).length
   const titles = { dashboard: 'Dashboard', customers: 'Customers', new: 'Add customer', detail: 'Customer details', edit: 'Edit customer', loyalty: 'Loyalty visits', vouchers: 'Vouchers' }
   return <div className="app-shell">

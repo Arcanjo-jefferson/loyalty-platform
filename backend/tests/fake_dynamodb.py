@@ -55,6 +55,11 @@ class FakeDynamoDB:
         values = self.decode(action.get('ExpressionAttributeValues', {}))
         if expression == 'attribute_not_exists(#pk)':
             return item is None
+        if expression == '#owner = :owner AND #business = :business':
+            return item is not None and item.get('owner_customer_id') == values[':owner'] and item.get('owner_business_id') == values[':business']
+        prefix_qr = '#type = :type AND #qr = :old AND #updated = :expected AND '
+        if expression.startswith(prefix_qr):
+            return item is not None and item.get('item_type') == values[':type'] and item.get('qr_token') == values[':old'] and item.get('updated_at') == values[':expected'] and (item.get('public_qr_ref') == values[':old_ref'] if ':old_ref' in values else 'public_qr_ref' not in item)
         if expression == '#owner = :owner':
             return item is not None and item.get('owner_customer_id') == values[':owner']
         if expression == '#phone = :old_phone AND #updated = :expected AND #type = :customer_type':

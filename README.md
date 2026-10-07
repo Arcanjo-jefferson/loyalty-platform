@@ -2,7 +2,7 @@
 
 A local MVP for a future multi-business customer loyalty and SMS marketing platform. The project is designed to give managers a customer directory and, tools for recording visits and, in later milestones, issuing rewards and communicating with customers who have opted into marketing.
 
-**Current status: Milestones 1–3 completed and manually verified against AWS by the project owner; Milestone 4 profile-photo storage/retrieval manually verified; Milestone 5A complete; Milestone 5B voucher engine implemented, awaiting live AWS/browser acceptance.** The application runs locally with a React manager dashboard and a FastAPI customer API. Customer persistence is configurable between DynamoDB and an optional in-memory repository. Cognito business-user login and server-side role/tenant authorization are implemented. Private customer images, camera capture and ID verification are implemented. QR lookup, explicit visit confirmation and loyalty progress are implemented. Automatic €10 loyalty/€20 birthday vouchers and redemption are implemented; SMS sending remains planned. DynamoDB persistence was manually verified by the project owner.
+**Current status: Milestones 1–3 completed and manually verified against AWS by the project owner; Milestone 4 profile-photo storage/retrieval manually verified; Milestone 5A complete; Milestone 5B voucher engine implemented; Milestone 5B.1 QR management implemented, awaiting live acceptance.** The application runs locally with a React manager dashboard and a FastAPI customer API. Customer persistence is configurable between DynamoDB and an optional in-memory repository. Cognito business-user login and server-side role/tenant authorization are implemented. Private customer images, camera capture and ID verification are implemented. QR lookup, explicit visit confirmation and loyalty progress are implemented. Automatic €10 loyalty/€20 birthday vouchers and redemption are implemented; SMS sending remains planned. DynamoDB persistence was manually verified by the project owner.
 
 ## Implemented features
 
@@ -13,7 +13,7 @@ A local MVP for a future multi-business customer loyalty and SMS marketing platf
 - Irish mobile input with a visible Ireland `+353` indicator. National and international formats are normalized to E.164 by the backend before storage and per-business duplicate checks. Incomplete or malformed numbers are rejected. Validation checks format, not phone ownership or service availability.
 - Minimum age of 18 enforced in frontend and backend using the full birth date and the current date in `Europe/Dublin`. Invalid and future dates are rejected. February 29 birthdays reach the age threshold on March 1 in non-leap years.
 - Explicit promotional/marketing SMS consent, with a UTC timestamp for the most recent consent transition.
-- Secure UUID4 customer IDs and separate random, opaque `qr_token` values containing no personal data. Keyboard scanner lookup and confirmed visit tracking are implemented; QR rendering/printing remains planned.
+- Secure UUID4 customer IDs and separate random, opaque `qr_token` values containing no personal data. Keyboard scanner lookup and confirmed visit tracking are implemented; QR rendering, customer-facing links and protected regeneration are implemented; printing remains planned.
 - Server-managed UTC creation/update timestamps and active/inactive customer status.
 - Successful registration and updates automatically open the customer's profile using the saved API response immediately. Reusable accessible notifications display `Customer registered successfully.` or `Customer details updated successfully.`
 - Failed submissions remain on the form, preserve entered values and show an error without success feedback.
@@ -31,7 +31,7 @@ A local MVP for a future multi-business customer loyalty and SMS marketing platf
 | Area     | Current technology |
 | ---      | --- |
 | Frontend | React 19, JavaScript, Vite 8, Amplify Auth, reusable components and CSS |
-| Backend  | Python, FastAPI, Pydantic 2, Uvicorn, PyJWT with cryptography, Pillow |
+| Backend  | Python, FastAPI, Pydantic 2, Uvicorn, PyJWT with cryptography, Pillow, qrcode |
 | Storage  | DynamoDB and private S3 via boto3; optional process-local in-memory customer repository |
 | Checks   | Python `unittest`, Node.js test runner, Oxlint, Vite production build |
 
@@ -874,3 +874,84 @@ and Dublin dates, sequence 1–4, `acceptance_test_data=true` and
 Cognito identity. Reruns refuse existing history. The resulting progress is 4/5,
 one visit until reward; record the fifth through the normal authenticated UI/API.
 This tool must never be used with real customer data or production tables.
+
+
+## Milestone 5B.1: Customer QR management
+
+Authenticated Owner, Manager and Staff can search their existing business-scoped
+customer directory by first/last/full name and equivalent Irish national or
+`+353` mobile numbers. The profile's **Loyalty QR** renders the existing opaque
+token as a locally generated PNG. No third-party QR service receives identifiers.
+`qrcode==8.2` reuses Pillow; no npm dependency was added.
+
+**Copy QR Link** recovers the stable `/q/<opaque-reference>` link. The public
+mobile page displays generic Contactly branding, instructions and the QR only,
+without login or customer information. **Send QR Link** explicitly reports SMS
+is not configured (501); it never claims delivery. Owner/Manager regeneration
+requires confirmation; Staff is denied by the backend. Regeneration atomically
+replaces the customer token, QR lock and public pointer, invalidating both old
+credentials while preserving customer information, media, visits and vouchers.
+Concurrent stale requests return 409 rather than overwriting newer credentials.
+Scanning still only identifies the customer; recording a visit requires confirmation.
+
+| Endpoint | Access / purpose |
+| --- | --- |
+| `POST /customers/{id}/qr/link` with `{}` | All business roles; initialize/recover stable link reference |
+| `GET /customers/{id}/qr/image` | All business roles; authenticated PNG |
+| `POST /customers/{id}/qr/regenerate` | Owner/Manager; `confirmed: true` and current `expected_qr_token` |
+| `POST /customers/{id}/qr/send` with `{}` | Authenticated placeholder; SMS not configured |
+| `GET /public/qr/{reference}/image` | Minimal public PNG; current active customer only |
+
+The private CUSTOMER attribute `public_qr_ref` is initialized lazily, without
+rotating existing tokens. A same-table routing directory uses reserved partition
+`!PUBLIC_QR`, sort key `PUBLIC#<reference>` and type `PUBLIC_QR`, mapping internally
+to the business/customer. This reserved partition cannot be an authenticated
+business ID. Customer resources and QR locks remain tenant-scoped. Strong point
+reads and conditional transactions need no Scan, GSI or new AWS resources.
+Public references and replacement tokens each have 256 bits of cryptographic
+randomness. Directory records never appear in customer responses/list results.
+
+No bulk migration is needed: first profile access creates the pointer. Existing
+customers still need the earlier QR_LOCK backfill if their lookup lock is absent.
+Existing DynamoDB IAM permissions must permit transactions/reads for this
+reserved partition; review any tenant LeadingKeys restrictions manually. This
+implementation does not change IAM or other AWS resources automatically.
+
+Optional frontend `VITE_CUSTOMER_QR_BASE_URL` sets the customer-facing origin;
+default is the current browser origin. No production domain is hardcoded. The
+origin must serve the React app with an SPA fallback for `/q/*`; the existing
+`VITE_API_URL` remains the backend origin. Install updated backend requirements
+and restart the backend; restart Vite when changing environment variables.
+
+Public links are bearer credentials: share only with the intended customer.
+They do not authorize visits or access to private profiles/media. PNG responses
+are no-store; pages/images suppress referrers. Production hosting must use HTTPS,
+avoid logging public references and provide appropriate abuse controls. A QR
+already downloaded cannot be erased; after regeneration its token no longer
+resolves, and refreshing the old public link fails. Public pages intentionally
+show no customer name. Real Honeywell hardware acceptance remains manual;
+images encode the exact raw token accepted by the existing scanner workflow.
+
+### Manual acceptance
+
+1. Install `backend/requirements.txt` in the existing venv; start the backend
+   with the existing Cognito/DynamoDB configuration. Start Vite with `npm run dev`.
+2. Log in as Owner/Manager; search a fictional customer by first name, surname,
+   full name, local phone and `+353` phone. Confirm only your business results.
+3. Open their profile: see the name and QR without copying a DynamoDB token.
+   Copy the link twice and reload the profile; the link and QR must stay stable.
+4. Open the copied link in a logged-out/private browser. Confirm only Contactly,
+   QR and instructions appear; inspect no private profile/history/voucher data.
+5. Scan the displayed QR using the existing Loyalty visits input. Lookup must
+   identify the customer without recording a visit. Confirm only if a real test
+   visit is intended; all existing daily/reward rules still apply.
+6. Click Send QR Link: confirm the unconfigured message and no delivery success.
+7. Save the old link/token for testing. Cancel regeneration first (no change),
+   then explicitly confirm as Owner/Manager. Old lookup/link must fail; the new
+   link/QR must work. Check customer details, photos, visit counts and vouchers
+   are preserved. Two tabs using the old token must not both regenerate.
+8. Log in as Staff: search, view and copy work; regeneration is absent and direct
+   regeneration API access returns 403. Repeat business-isolation checks with
+   an existing separate-business account. Inactive customers' public links fail.
+
+No Twilio, raffle, printing, scanner drivers or changes to reward rules are added.

@@ -1,6 +1,9 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from app.qr_routes import router as qr_router
+from app.qr_service import QRService
+from app.qr_repository import QRNotFound
 from app.voucher_routes import router as voucher_router
 from app.voucher_service import VoucherService
 from app.voucher_repository import VoucherNotFound, VoucherNotRedeemable
@@ -28,9 +31,15 @@ def create_app(repository=None, token_verifier=None, media_storage=None):
     app.state.loyalty_service = LoyaltyService(app.state.customer_service)
     # Specific visit routes must precede the media category catch-all.
     app.state.voucher_service = VoucherService(app.state.customer_service)
+    app.state.qr_service = QRService(app.state.customer_service)
+    app.include_router(qr_router)
     app.include_router(voucher_router)
     app.include_router(loyalty_router)
     app.include_router(media_router)
+
+    @app.exception_handler(QRNotFound)
+    async def qr_not_found(request, exc):
+        return JSONResponse(status_code=404, content={'detail': 'QR link is unavailable.'}, headers={'Cache-Control': 'no-store'})
 
     @app.exception_handler(VoucherNotFound)
     async def voucher_not_found(request, exc):

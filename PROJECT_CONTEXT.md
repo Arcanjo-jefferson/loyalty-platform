@@ -696,7 +696,7 @@ permissions, endpoints and manual acceptance procedure.
 - Automated tests use local fakes and SDK stubs, never the real AWS account
 
 See README for endpoints, explicit backfill commands and live acceptance steps.
-Milestone 5B below adds loyalty/birthday vouchers. No QR generation/printing,
+Milestone 5B below adds loyalty/birthday vouchers. QR generation is added in 5B.1 below. No printing,
 raffle/Epson integration or later milestone has been implemented. Full customer edit audit logs remain
 future work; visits retain their authenticated recorder and server timestamp.
 
@@ -733,6 +733,35 @@ is effective, not persisted by a scheduled task. Server request timestamps are
 trusted; clocks must be synchronized. Per-business timezone/programme settings,
 full audits, refunds/voiding and historical remediation remain future work.
 See README for exact live acceptance steps and current limitations.
+
+# Milestone 5B.1 — IMPLEMENTED; LIVE ACCEPTANCE PENDING
+
+- Tenant-scoped name/full-name and normalized Irish phone directory search
+- Profile QR PNG encodes the existing opaque token; qrcode 8.2 + existing Pillow
+- Stable random 256-bit public reference, initialized lazily without token rotation
+- Public /q/<reference> view exposes only Contactly branding, QR and instructions
+- Copy/recover existing link; authenticated SMS boundary returns unconfigured 501
+- Owner/Manager explicit confirmed regeneration; backend denies Staff
+- Atomic token/QR_LOCK/public-pointer replacement; old token/link invalidation
+- Conditional revision/token checks handle concurrent regeneration safely
+- Customer/media/history/counters/vouchers and existing authorization preserved
+- Same-table internal PUBLIC_QR routing records: reserved business_id !PUBLIC_QR,
+  customer_id PUBLIC#<reference>, owner business/customer pointers. This directory
+  is the deliberate exception to tenant partitioning, required for opaque public
+  lookup without a Scan/GSI or tenant data in the URL. Verified business IDs cannot
+  use this reserved partition; actual customer resources remain tenant-scoped.
+- Public responses only PNG with no-store/referrer controls; inactive links fail
+- Optional VITE_CUSTOMER_QR_BASE_URL origin; production SPA fallback for /q/*
+- No automatic AWS/IAM changes; restrictive IAM may need manual directory access
+- No bulk migration; existing missing QR_LOCK records use the previous backfill
+- AWS-independent repository, API, role, concurrency, preservation and UI tests
+
+Public links are bearer credentials, not authenticated identity or automatic
+visit authorization. Downloaded old images remain visible but invalid for lookup
+after rotation. HTTPS, reference-log redaction and abuse controls belong in
+production hardening. Generic public branding avoids disclosing customer names.
+No Twilio, raffle, printing or Honeywell drivers are implemented. See README for
+endpoints, setup and exact manual acceptance procedure.
 
 # Future Milestones
 
