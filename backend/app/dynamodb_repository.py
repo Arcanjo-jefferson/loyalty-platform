@@ -12,9 +12,10 @@ from .repository import ConcurrentModification, DuplicatePhone, DuplicateQR, Sto
 
 from .loyalty_repository import DynamoLoyaltyMixin
 from .voucher_repository import DynamoVoucherMixin
+from .qr_repository import DynamoQRMixin
 
 
-class DynamoDBCustomerRepository(DynamoLoyaltyMixin, DynamoVoucherMixin):
+class DynamoDBCustomerRepository(DynamoLoyaltyMixin, DynamoVoucherMixin, DynamoQRMixin):
     PHONE_PREFIX = 'PHONE#'
     MAX_TRANSACTION_ATTEMPTS = 3
 

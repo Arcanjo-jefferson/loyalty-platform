@@ -34,6 +34,8 @@ class InactiveCustomer(Exception):
 class CustomerRepository(Protocol):
     def find_active_by_qr(self, business_id: str, qr_token: str) -> Customer | None: ...
     def record_visit(self, visit: Visit, reward_factory=None) -> tuple[Customer, Visit, int, list[Voucher]]: ...
+    def manage_qr(self, business_id: str, customer_id: str, *, expected_token: str | None = None): ...
+    def public_qr_token(self, reference: str) -> str: ...
     def reward_exists(self, business_id: str, key: str) -> bool: ...
     def vouchers(self, business_id: str, customer_id: str) -> list[Voucher]: ...
     def get_voucher(self, business_id: str, customer_id: str, voucher_id: str) -> Voucher: ...
@@ -62,6 +64,8 @@ class InMemoryCustomerRepository:
         self._vouchers = {}
         self._reward_locks = {}
         self._voucher_codes = {}
+        self._public_qr = {}
+        self._public_refs = {}
 
     def list(self, business_id):
         with self._lock:
@@ -171,3 +175,35 @@ class InMemoryCustomerRepository:
             saved = voucher.model_copy(update={'status': 'REDEEMED', 'redeemed_at': now, 'redeemed_by': subject})
             self._vouchers[(business_id, customer_id, voucher_id)] = saved
             return saved.model_copy(deep=True)
+
+
+    def manage_qr(self, business_id, customer_id, *, expected_token=None):
+        import secrets
+        from datetime import timezone
+        from .qr_repository import QRNotFound
+        with self._lock:
+            customer = self.get(business_id, customer_id)
+            if customer is None: raise QRNotFound()
+            old_ref = self._public_refs.get((business_id, customer_id))
+            if expected_token is not None and customer.qr_token != expected_token: raise ConcurrentModification()
+            if expected_token is None and old_ref: return customer, old_ref
+            reference = secrets.token_urlsafe(32)
+            token = secrets.token_urlsafe(32) if expected_token is not None else customer.qr_token
+            if reference in self._public_qr or ((business_id, token) in self._qr and token != customer.qr_token): raise ConcurrentModification()
+            if expected_token is not None:
+                self._qr.pop((business_id, customer.qr_token), None)
+                customer = customer.model_copy(update={'qr_token': token, 'updated_at': datetime.now(timezone.utc)})
+                self._customers[(business_id, customer_id)] = customer
+            if old_ref: self._public_qr.pop(old_ref, None)
+            self._qr[(business_id, token)] = customer_id
+            self._public_refs[(business_id, customer_id)] = reference
+            self._public_qr[reference] = (business_id, customer_id)
+            return customer.model_copy(deep=True), reference
+
+    def public_qr_token(self, reference):
+        from .qr_repository import QRNotFound
+        with self._lock:
+            owner = self._public_qr.get(reference)
+            customer = self.get(*owner) if owner else None
+            if not customer or customer.status != 'active': raise QRNotFound()
+            return customer.qr_token
