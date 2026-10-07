@@ -2,7 +2,7 @@
 
 A local MVP for a future multi-business customer loyalty and SMS marketing platform. The project is designed to give managers a customer directory and, tools for recording visits and, in later milestones, issuing rewards and communicating with customers who have opted into marketing.
 
-**Current status: Milestones 1–3 completed and manually verified against AWS by the project owner; Milestone 4 profile-photo storage/retrieval manually verified; Milestone 5A implemented, awaiting live QR/visit acceptance testing.** The application runs locally with a React manager dashboard and a FastAPI customer API. Customer persistence is configurable between DynamoDB and an optional in-memory repository. Cognito business-user login and server-side role/tenant authorization are implemented. Private customer images, camera capture and ID verification are implemented. QR lookup, explicit visit confirmation and loyalty progress are implemented. Voucher issuance and SMS sending remain planned. DynamoDB persistence was manually verified by the project owner.
+**Current status: Milestones 1–3 completed and manually verified against AWS by the project owner; Milestone 4 profile-photo storage/retrieval manually verified; Milestone 5A complete; Milestone 5B voucher engine implemented, awaiting live AWS/browser acceptance.** The application runs locally with a React manager dashboard and a FastAPI customer API. Customer persistence is configurable between DynamoDB and an optional in-memory repository. Cognito business-user login and server-side role/tenant authorization are implemented. Private customer images, camera capture and ID verification are implemented. QR lookup, explicit visit confirmation and loyalty progress are implemented. Automatic €10 loyalty/€20 birthday vouchers and redemption are implemented; SMS sending remains planned. DynamoDB persistence was manually verified by the project owner.
 
 ## Implemented features
 
@@ -55,6 +55,10 @@ loyalty-platform/
 │   │   ├── media_routes.py     # Authenticated metadata/upload/image/verification endpoints
 │   │   ├── media_service.py    # Validation, revisions, audit metadata and replacement cleanup
 │   │   ├── media_storage.py    # Private S3 adapter and SDK configuration
+│   │   ├── voucher_rules.py    # Calendar reward policy and secure codes
+│   │   ├── voucher_repository.py # Reward/code locks and conditional redemption
+│   │   ├── voucher_service.py  # Effective expiry, listing and code lookup
+│   │   ├── voucher_routes.py   # Authenticated voucher endpoints
 │   │   ├── models.py           # Customer models and input validation
 │   │   ├── routes.py           # Customer HTTP endpoints
 │   │   ├── service.py          # Customer IDs, consent and timestamp logic
@@ -310,7 +314,7 @@ Frontend tests cover phone/age validation, Ireland's calendar date, bearer attac
 - **Memory mode only:** records are process-local, start empty and are lost on restart/reload. Use one worker in this mode; different workers have separate records. There is no automatic migration between memory and DynamoDB.
 - Authentication and role/tenant checks are implemented, but this remains a local development application. The project owner has manually verified live Cognito login and tenant isolation. Browser sessions are JavaScript-readable, backend JWT validation does not immediately revoke already issued tokens, and production HTTPS, MFA, rate limiting and audit hardening remain outstanding.
 - Customer data is not saved to browser storage. The customer directory does not display internal IDs or QR tokens, although the API returns them.
-- SMS consent is recorded, but no messages are sent. QR lookup, confirmed visits and loyalty progress are implemented; voucher issuance/redemption and full historical audit logs remain planned.
+- SMS consent is recorded, but no messages are sent. QR lookup, confirmed visits and loyalty progress are implemented; automatic vouchers and redemption are implemented; full historical audit logs remain planned.
 
 ## First real DynamoDB persistence test
 
@@ -342,13 +346,14 @@ Live Cognito acceptance has not been performed by the automated tests; no real u
 
 ## Planned development roadmap
 
-Milestone 2 persistence has been manually verified by the project owner. Milestone 3 Cognito integration and current customer authorization are manually verified. Milestone 4 profile-photo storage/retrieval is manually verified. Milestone 5A QR lookup and visit tracking is implemented; live acceptance is pending. The following later milestones are **not implemented**, following `PROJECT_CONTEXT.md`:
+Milestone 2 persistence has been manually verified by the project owner. Milestone 3 Cognito integration and current customer authorization are manually verified. Milestone 4 profile-photo storage/retrieval is manually verified. Milestone 5A QR lookup and visit tracking is complete. Milestone 5B automatic vouchers and redemption is implemented; live acceptance is pending. The following later milestones are **not implemented**, following `PROJECT_CONTEXT.md`:
 
-- **Milestone 5B:** €10 voucher generation after five visits and single-use redemption.
+- **Milestone 5C:** Daily Raffle entry workflow.
+- **Milestone 5D:** receipt printing and Windows/Epson print agent.
 - **Milestone 7:** Twilio messaging, consent-aware campaigns and scheduled birthday promotions.
 - **Milestone 8:** audit/security/privacy hardening and production deployment, including future Lambda/API Gateway and hosting infrastructure.
 
-Exact boundaries may evolve. No vouchers, Twilio, birthday automation or Lambda deployment is included in the current implementation.
+Exact boundaries may evolve. No raffle entries, printing, Twilio, scheduled birthday SMS automation or Lambda deployment is included in the current implementation.
 
 ### Retrying a temporary-password sign-in
 
@@ -599,7 +604,8 @@ UTC `visited_at`, `local_visit_date` and `business_timezone`.
 Before confirmation the repository reads the lifetime counter, then uses a
 strongly consistent paginated Query of that customer's retained history to
 check the Dublin date. The transaction checks active status and the expected
-counter, updates only the lifetime count, and inserts the immutable visit.
+counter/customer update timestamp, updates only the lifetime count, and inserts
+the immutable visit plus any qualifying 5B vouchers and locks.
 If another request commits first, the counter condition fails and the repository
 re-reads history. Thus simultaneous requests cannot accept the same local date.
 This queries one customer's history, never a table Scan; read cost grows with
@@ -610,12 +616,11 @@ Same-date confirmation returns 409 with
 The frontend displays this message without success feedback. Rejection changes
 neither the count nor history. Customer edits preserve loyalty/media metadata.
 There is no cooldown setting. The date rule will also inform future Daily Raffle
-eligibility, but no raffle entry or voucher is created here.
+eligibility, but no raffle entry is created. Milestone 5B now issues qualifying vouchers in the same visit transaction.
 
 Threshold is five: `progress=total_visits % 5`, `visits_until_reward=5-progress`,
 `reward_earned=total_visits > 0 and progress == 0`. Visit five returns 5/0/5/true;
-visit six returns 6/1/4/false. History is never deleted. The UI shows **€10 reward
-earned** at a completed cycle, but no voucher is created or issued in 5A.
+visit six returns 6/1/4/false. History is never deleted. Milestone 5B now shows **€10 Loyalty Voucher earned** at a completed cycle and issues a real voucher.
 History and counter are separate strongly consistent reads, so a concurrent
 confirmation can briefly make their snapshots differ; refresh retrieves current data.
 Memory mode supports the same workflow but loses customer/index/visit data on restart.
@@ -652,7 +657,7 @@ never changes IAM or table settings.
 Restart the backend/frontend, log in, and use a fictional active customer's
 existing token in **Loyalty visits**. Confirm lookup leaves the count unchanged,
 confirmation adds exactly one visit, an immediate retry is rejected, and visit
-five displays the reward with all five history records retained. Wait until the next Dublin calendar date between valid confirmations. Verify an inactive
+five displays the issued loyalty voucher with all five history records retained. Wait until the next Dublin calendar date between valid confirmations. Verify an inactive
 customer and a different-business user cannot record/access that customer's visits.
 Automated loyalty tests use fakes/stubs and require no real AWS account.
 
@@ -688,4 +693,184 @@ For live acceptance with the existing development customer:
    A 23:55 visit followed by 00:05 on the next local date is allowed; automated
    tests cover that boundary and both DST transitions without changing clocks.
 6. Across five distinct valid dates, progress reaches 0/5 with reward earned;
-   the sixth reaches 1/5. All history remains and no voucher is issued.
+   the sixth reaches 1/5. All history remains; a loyalty voucher is now issued by 5B at each new fifth visit.
+
+
+## Milestone 5B: Voucher and reward engine
+
+Every new fifth valid visit (5, 10, 15, …) automatically issues exactly one
+**€10 Loyalty Voucher**, using integer `value_cents=1000`. It is usable only on
+its issue date in **Europe/Dublin**, expiring at the next local midnight.
+A 23:50 issue expires ten minutes later, not after 24 hours.
+
+A valid visit during the Monday–Sunday week containing the customer's birthday
+issues a separate **€20 Birthday Voucher** (`value_cents=2000`), at most once
+per customer per birthday year. Adjacent birthday years are checked to handle
+weeks spanning December/January. February 29 birthdays use **March 1 in non-leap
+years**. Birthday validity ends at the following Monday's Dublin midnight.
+No birthday voucher is issued outside the birthday week or without a valid confirmed
+visit. Both vouchers may be issued together; they remain separate records.
+
+Vouchers retain business/customer UUIDs, type, value, random code, issue UTC
+time and local date, timezone, issuer Cognito subject, qualifying visit UUID,
+birthday year or loyalty milestone, UTC expiry, status and redemption identity/time.
+Statuses are `ACTIVE`, `REDEEMED`, `EXPIRED`. Reads compute effective expiry
+without a scheduled task or database write. A stored ACTIVE row past its
+boundary is returned EXPIRED and cannot be redeemed. REDEEMED stays REDEEMED
+for history. DST produces correctly shorter/longer days and weeks.
+
+Owner, Manager and Staff may list, look up and redeem vouchers within their
+verified business. The UI's **Vouchers** navigation opens a code lookup and
+explicit redemption form; profiles list code, type, value, effective status,
+issue/expiry and redemption dates. Display times use Dublin. Client rendering
+also disables vouchers at their expiry boundary; backend enforcement is authoritative.
+No internal DynamoDB lock keys are exposed. No arbitrary issuance endpoint exists.
+
+Authenticated endpoints:
+
+- `GET /customers/{customer_id}/vouchers`
+- `POST /vouchers/lookup` with `{"voucher_code":"ABCDE-FGHJK-LMNPQ-RSTUV"}`
+  (fictional formatting example; lowercase and ungrouped input are accepted)
+- `POST /customers/{customer_id}/vouchers/{voucher_id}/redeem` with `{}`
+- Valid visit responses additionally contain `vouchers`, containing only newly
+  issued vouchers. QR lookup and rejected daily visits issue nothing.
+
+### DynamoDB records and atomicity
+
+All records retain `business_id` as the partition key in the existing table.
+
+| Sort key `customer_id` | Type | Purpose |
+| --- | --- | --- |
+| `VOUCHER#<customer UUID>#<voucher UUID>` | `VOUCHER` | Permanent customer voucher history, efficiently queried by prefix |
+| `REWARD#<customer UUID>#LOYALTY_10#<cycle number>` | `REWARD_LOCK` | At most one loyalty voucher per five-visit milestone |
+| `REWARD#<customer UUID>#BIRTHDAY_20#<birthday year>` | `REWARD_LOCK` | At most one birthday voucher per year |
+| `VCODE#<code>` | `VOUCHER_CODE` | Unique code-to-voucher lookup within the business |
+
+Visit registration reads the persisted customer/counter and strongly consistent
+history, evaluates reward policy, and commits a **single DynamoDB transaction**:
+conditional customer counter update, visit insert, plus voucher/reward-lock/code-lock
+inserts (maximum eight actions for two rewards). All inserts require absence.
+The customer update checks active status, expected lifetime count and expected
+`updated_at`, so concurrent DOB edits cause policy re-evaluation. Reward locks
+remain after redemption/expiry. Customer responses exclude every internal type.
+Existing phone, QR, visit and private media attributes remain intact.
+
+Codes contain 20 cryptographically random symbols from a 32-character alphabet
+(100 bits), grouped in four blocks of five; no names, phones or DOBs. Code-lock
+collisions roll back the entire transaction and retry with new codes, bounded
+to three application attempts. Milestone/year locks prevent repeat issuance.
+All SDK retries for an unchanged transaction share its client request token.
+
+Redemption transactionally updates only an ACTIVE VOUCHER with a numeric expiry
+boundary greater than the trusted request timestamp. It sets REDEEMED and the
+server UTC timestamp/Cognito subject. Two requests can read ACTIVE, but only
+one conditional update succeeds. The second returns a friendly 409. Reads are
+scoped; cross-business code lookup/redemption returns no voucher. Expired and
+already redeemed vouchers return 409. Authentication remains unchanged.
+
+**Failure/retry:** a rejected transaction commits none of its visit/reward writes.
+If a response is lost after AWS committed, the visit and rewards already exist
+together. A retry hits the daily-visit guard; refresh customer history/vouchers
+to inspect the committed result. Redemption with a lost response likewise
+requires a status refresh; retry cannot redeem twice. There is no background
+recovery queue because visit/reward persistence is one atomic transaction.
+SDK/network failures remain sanitized; no raw AWS data is returned.
+
+### Upgrade and live acceptance
+
+No schema, GSI, AWS resource change, new environment variable or voucher backfill
+is required. Existing 5A history/counts are preserved. **Past 5A milestones do
+not retroactively receive vouchers**, and a duplicate of a prior visit cannot
+issue one. Issuance starts with new valid visits; an existing count of five
+reaches its next loyalty voucher at ten. Historical remediation, if wanted,
+requires a separately authorized migration with its own expiry policy. Existing
+QR locks remain required; the earlier explicit QR backfill applies only if still missing.
+
+Stop every old backend process before restarting so older code cannot record
+rewardless qualifying visits. With the existing backend `.env` unchanged:
+
+```bash
+cd /Users/jeffersonarcanjo/Desktop/Trumps/loyalty-platform/backend
+source venv/bin/activate
+aws sso login --profile loyalty-dev
+uvicorn main:app --reload
+```
+
+In a second terminal:
+
+```bash
+cd /Users/jeffersonarcanjo/Desktop/Trumps/loyalty-platform/frontend
+npm run dev
+```
+
+1. Log in with the existing Owner/Manager/Staff Cognito account. Open the
+   existing fictional DynamoDB customer; note total visits, DOB and voucher list.
+2. Use **Loyalty visits** with its unchanged token. Lookup alone must not create
+   a visit/voucher. An already-recorded visit on today's Dublin date must reject
+   without changing count/history/vouchers.
+3. On each distinct available Dublin date confirm once. The next count divisible
+   by five issues one €10 voucher, shows **€10 Loyalty Voucher earned**, and
+   returns progress 0/5. Open the profile; refresh and verify one voucher and
+   unchanged permanent visit history. Do not edit counters or system clocks.
+4. For birthday acceptance, use only fictional data: before a new eligible visit,
+   choose an adult DOB whose month/day lies in that visit's Dublin week. If the
+   visit is also a fifth milestone, expect both reward messages and two records.
+   Subsequent valid visits in that birthday week must not issue another birthday
+   voucher. Once-per-year protection remains even if that voucher is redeemed.
+5. Copy a displayed fictional voucher code into **Vouchers**, look it up, and
+   redeem explicitly. Verify REDEEMED and redemption time. Retry (or use two tabs)
+   and verify no second redemption succeeds. Authenticated API responses record
+   the Cognito `sub`; never paste or expose JWTs to inspect this.
+6. Leave another loyalty voucher unredeemed until the next Dublin midnight;
+   refresh/lookup must show EXPIRED and reject redemption. Birthday vouchers
+   expire on the following Monday. Use automated clock-controlled tests for
+   midnight/DST/annual scenarios without altering the live clock.
+7. Repeat access checks with the existing separate-business account: it cannot
+   list/look up/redeem these vouchers. Check photos/ID/consent role permissions
+   and QR lookup remain unchanged.
+
+Automated tests use memory, an atomic paginated DynamoDB fake, local JWT keys
+and SDK stubs; no real AWS account is needed. Real voucher acceptance has not
+been run automatically. Known limitations: policy timezone is currently Dublin
+for all configured businesses; per-business programme settings remain future
+work. Customer history Queries grow with retained history; no global reporting
+index, cancellation/refund workflow or full administrative audit log is added.
+Effective EXPIRED is computed rather than persisted. Expiry is evaluated against
+the server request timestamp; keep server clocks synchronized. Transactions
+received just before midnight are judged at that trusted timestamp.
+
+**Milestone 5C Daily Raffle entries and Milestone 5D receipt/Windows/Epson
+printing remain deferred.** There is no `window.print()`, print agent, raffle
+entry, Twilio message, scheduled birthday automation or AWS deployment added.
+
+
+### Development-only four-visit acceptance seed
+
+`scripts/seed_acceptance_visits.py` is standalone development/acceptance tooling,
+never an application endpoint. Select an active **fictional** customer created
+through the normal UI with zero visits and no vouchers/reward locks. It previews
+four VISIT records at Dublin noon on the four dates before today and one
+counter change from zero to four. Dry runs never write; `--apply` is required.
+`--verify` is a separate read-only check after seeding and before normal visit #5.
+The script uses the existing DynamoDB environment/profile, without table/account
+constants or AWS resource changes. Run from `backend/` with the venv active:
+
+```bash
+python scripts/seed_acceptance_visits.py --business trumps --customer-id CUSTOMER_UUID
+python scripts/seed_acceptance_visits.py --business trumps --customer-id CUSTOMER_UUID --apply
+python scripts/seed_acceptance_visits.py --business trumps --customer-id CUSTOMER_UUID --verify
+```
+
+Replace CUSTOMER_UUID with the fictional customer's UUID. UUIDs in previews are
+new random candidates each invocation. APPLY prints the records actually written.
+All five writes commit together, guarded by active status, zero lifetime counter,
+unchanged customer revision and absent visit keys. Concurrent normal writers
+increment the counter and invalidate this transaction. No DynamoDB range lock
+exists; do not concurrently modify records manually or run unrelated migrations.
+No vouchers, reward locks or code locks are created, including birthday rewards.
+Existing QR/phone/media attributes remain intact. Synthetic visits retain UTC
+and Dublin dates, sequence 1–4, `acceptance_test_data=true` and
+`recorded_by=development:milestone-5b-acceptance-seed`, deliberately not a claimed
+Cognito identity. Reruns refuse existing history. The resulting progress is 4/5,
+one visit until reward; record the fifth through the normal authenticated UI/API.
+This tool must never be used with real customer data or production tables.

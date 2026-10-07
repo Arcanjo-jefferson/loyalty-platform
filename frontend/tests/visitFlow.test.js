@@ -7,14 +7,14 @@ test('keyboard lookup identifies the customer without recording a visit; explici
   const calls = []
   const flow = createVisitFlow({ request: async (path, options) => {
     calls.push({ path, body: JSON.parse(options.body) })
-    return calls.length === 1 ? lookup : { customer, visit: { visit_id: 'fixture' }, total_visits: 5, progress: 0, visits_until_reward: 5, reward_earned: true }
+    return calls.length === 1 ? lookup : { customer, visit: { visit_id: 'fixture' }, total_visits: 5, progress: 0, visits_until_reward: 5, reward_earned: true, vouchers: [{ type: 'LOYALTY_10' }] }
   } })
   await flow.lookup(' fixture-qr-token-123 ')
   assert.equal(flow.getSnapshot().stage, 'ready'); assert.equal(flow.getSnapshot().result.progress, 4)
   assert.deepEqual(calls, [{ path: '/loyalty/lookup', body: { qr_token: 'fixture-qr-token-123' } }])
   await flow.confirm()
   assert.equal(calls[1].path, '/customers/fictional-id/visits'); assert.deepEqual(calls[1].body, {})
-  assert.equal(flow.getSnapshot().result.progress, 0); assert.match(flow.getSnapshot().notice, /€10 reward earned/)
+  assert.equal(flow.getSnapshot().result.progress, 0); assert.match(flow.getSnapshot().notice, /€10 Loyalty Voucher earned/)
   await flow.confirm(); assert.equal(calls.length, 2) // No double confirmation after success.
 })
 test('unknown/inactive QR, invalid input and edited scan cannot confirm a stale customer', async () => {
@@ -47,7 +47,7 @@ test('simultaneous confirmation clicks send only one write and unmount ignores d
   } })
   await flow.lookup('fixture-qr-token-123')
   const first = flow.confirm(); await flow.confirm(); assert.equal(writes, 1)
-  flow.cancel(); release({ ...lookup, total_visits: 5, reward_earned: true }); await first
+  flow.cancel(); release({ ...lookup, total_visits: 5, reward_earned: true, vouchers: [{ type: 'LOYALTY_10' }] }); await first
   assert.equal(flow.getSnapshot().result, null); assert.equal(flow.getSnapshot().notice, '')
 })
 test('ordinary visit success updates progress without reward text', async () => {

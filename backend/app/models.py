@@ -70,3 +70,23 @@ class Visit(BaseModel):
     visit_number: int = Field(default=0, ge=0)
     local_visit_date: date | None = None
     business_timezone: str | None = None
+
+
+class Voucher(BaseModel):
+    business_id: str
+    voucher_id: str
+    voucher_code: str
+    customer_id: str
+    type: Literal['LOYALTY_10', 'BIRTHDAY_20']
+    value_cents: int = Field(gt=0)
+    status: Literal['ACTIVE', 'REDEEMED', 'EXPIRED']
+    issued_at: datetime
+    issued_local_date: date
+    timezone: str
+    issued_by: str
+    qualifying_visit_id: str
+    birthday_year: int | None = None
+    loyalty_milestone: int | None = None
+    expires_at: datetime
+    redeemed_at: datetime | None = None
+    redeemed_by: str | None = None

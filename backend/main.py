@@ -1,6 +1,9 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from app.voucher_routes import router as voucher_router
+from app.voucher_service import VoucherService
+from app.voucher_repository import VoucherNotFound, VoucherNotRedeemable
 from app.loyalty_routes import router as loyalty_router
 from app.loyalty_service import LoyaltyService
 from app.repository import DuplicateQR, DuplicateVisit, InactiveCustomer
@@ -15,7 +18,7 @@ from app.service import CustomerNotFound, CustomerService
 
 
 def create_app(repository=None, token_verifier=None, media_storage=None):
-    app = FastAPI(title='Loyalty Platform API', version='0.6.0')
+    app = FastAPI(title='Loyalty Platform API', version='0.7.0')
     app.state.customer_service = CustomerService(repository if repository is not None else build_repository(Settings.from_environment()))
     app.add_middleware(CORSMiddleware, allow_origins=['http://localhost:5173', 'http://127.0.0.1:5173'], allow_methods=['GET', 'POST', 'PUT', 'PATCH'], allow_headers=['Content-Type', 'Authorization'])
     app.state.token_verifier = token_verifier if token_verifier is not None else CognitoVerifier.from_environment()
@@ -24,8 +27,18 @@ def create_app(repository=None, token_verifier=None, media_storage=None):
     app.state.media_service = MediaService(app.state.customer_service, media_storage if media_storage is not None else build_media_storage())
     app.state.loyalty_service = LoyaltyService(app.state.customer_service)
     # Specific visit routes must precede the media category catch-all.
+    app.state.voucher_service = VoucherService(app.state.customer_service)
+    app.include_router(voucher_router)
     app.include_router(loyalty_router)
     app.include_router(media_router)
+
+    @app.exception_handler(VoucherNotFound)
+    async def voucher_not_found(request, exc):
+        return JSONResponse(status_code=404, content={'detail': 'Voucher not found.'})
+
+    @app.exception_handler(VoucherNotRedeemable)
+    async def voucher_not_redeemable(request, exc):
+        return JSONResponse(status_code=409, content={'detail': 'This voucher has expired or has already been redeemed.'})
 
     @app.exception_handler(DuplicateQR)
     async def duplicate_qr(request, exc):
@@ -73,7 +86,7 @@ def create_app(repository=None, token_verifier=None, media_storage=None):
 
     @app.get('/')
     def root():
-        return {'message': 'Loyalty Platform API is running', 'version': '0.6.0'}
+        return {'message': 'Loyalty Platform API is running', 'version': '0.7.0'}
 
     @app.get('/health')
     def health():

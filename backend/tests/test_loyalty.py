@@ -13,6 +13,7 @@ from app.models import CustomerInput
 from app.repository import InMemoryCustomerRepository, DuplicateVisit, InactiveCustomer, DuplicateQR, ConcurrentModification, StorageUnavailable
 from app.dynamodb_repository import DynamoDBCustomerRepository
 from app.service import CustomerService, CustomerNotFound
+from app.voucher_rules import rewards_for_visit
 from app.loyalty_service import LoyaltyService
 from fake_dynamodb import FakeDynamoDB
 from test_auth import request
@@ -203,7 +204,7 @@ class LoyaltyRepositoryTests(unittest.TestCase):
             stub.add_response('query', {'Items': []}, query)
             stub.add_response('transact_write_items', {}, write)
             with patch('app.loyalty_repository.uuid4', return_value=write['ClientRequestToken']):
-                saved = adapter.record_visit(result['visit'])
+                saved = adapter.record_visit(result['visit'], rewards_for_visit)
             self.assertEqual(saved[2], 1)
             self.repo.ensure_qr_lock(self.customer)
             write = [params for operation, params in self.db.calls if operation == 'transact_write_items'][-1]

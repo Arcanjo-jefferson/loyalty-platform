@@ -258,7 +258,7 @@ Every visit now records:
 
 After 5 qualifying visits:
 
-- Milestone 5A reports a €10 reward earned; voucher issuance belongs to 5B
+- Milestone 5B atomically issues a €10 loyalty voucher for that new fifth visit
 - displayed loyalty progress returns to 0/5
 
 IMPORTANT:
@@ -276,10 +276,10 @@ Vouchers must:
 
 - have random/non-predictable codes
 - belong to a customer and business
-- have an active/redeemed status
+- have ACTIVE, REDEEMED or effective EXPIRED status
 - only be redeemable once
 - record redemption timestamp
-- eventually record which staff member redeemed them
+- record the authenticated Cognito subject that redeemed them
 
 Voucher history must be preserved.
 
@@ -294,7 +294,9 @@ Cognito authenticates BUSINESS USERS, not loyalty customers.
 The following authorization model is finalized. Milestone 3 implements
 authentication, role guards and current customer permissions. Milestone 4 implements protected customer media and manual ID verification.
 Milestone 5A implements QR lookup, visit confirmation and progress for all three roles.
-Permissions for SMS, vouchers, staff administration and reports remain
+Milestone 5B implements automatic vouchers, customer voucher lists, code lookup
+and redemption for all three roles.
+Permissions for SMS, staff administration and reports remain
 requirements for future endpoints.
 
 ## OWNER / ADMIN
@@ -611,7 +613,7 @@ The project owner reports successful manual AWS DynamoDB persistence
 verification. Automated tests continue using fakes/stubs without AWS access.
 
 Milestone 2 preserved document metadata extensibility; Milestone 4 now adds
-S3 media. Milestone 5A now adds QR lookup and confirmed visits; vouchers and messaging remain unimplemented.
+S3 media. Milestone 5A now adds QR lookup and confirmed visits; Milestone 5B adds vouchers. Messaging remains unimplemented.
 
 ---
 
@@ -670,7 +672,7 @@ remain required. Use fictional documents only. No OCR, facial recognition,
 biometric matching or automated document verification. See README for setup,
 permissions, endpoints and manual acceptance procedure.
 
-# Milestone 5A — IMPLEMENTED; LIVE QR/VISIT ACCEPTANCE PENDING
+# Milestone 5A — COMPLETE
 
 - Business-scoped QR_LOCK index records; existing opaque tokens preserved
 - New customers atomically claim CUSTOMER, PHONE_LOCK and QR_LOCK
@@ -688,20 +690,57 @@ permissions, endpoints and manual acceptance procedure.
 - Future Daily Raffle eligibility will share this rule; no raffle creation yet
 - Lifetime count, progress=count % 5, visits_until_reward=5-progress;
   reward_earned true only for positive multiples of five
-- Fifth visit reports 0/5 progress and €10 reward earned; no voucher issued
+- Fifth visit reports 0/5 progress; Milestone 5B now issues an actual €10 voucher
 - Keyboard scanner lookup/confirm UI, profile photo and customer visit history
 - Internal records excluded from customer APIs; phone/media metadata preserved
 - Automated tests use local fakes and SDK stubs, never the real AWS account
 
 See README for endpoints, explicit backfill commands and live acceptance steps.
-No QR generation/printing, vouchers, birthday rewards, raffle/Epson integration
-or later milestone has been implemented. Full customer edit audit logs remain
+Milestone 5B below adds loyalty/birthday vouchers. No QR generation/printing,
+raffle/Epson integration or later milestone has been implemented. Full customer edit audit logs remain
 future work; visits retain their authenticated recorder and server timestamp.
+
+# Milestone 5B — IMPLEMENTED; LIVE VOUCHER ACCEPTANCE PENDING
+
+- Each new fifth valid visit issues one LOYALTY_10 voucher, value_cents=1000
+- Valid only on its issue Dublin date; expires at next local midnight
+- Valid visit in birthday Monday–Sunday week issues BIRTHDAY_20, value_cents=2000
+- Maximum one per customer/birthday year; adjacent years handle New Year weeks
+- Feb 29 uses March 1 in non-leap years; leap years retain Feb 29
+- Birthday validity ends at following Monday's Dublin midnight
+- Both rewards can issue as separate records for the same qualifying visit
+- UTC issue/expiry/redemption times; issue local date/timezone and Cognito identities
+- Effective ACTIVE/REDEEMED/EXPIRED status enforced at read and redemption time
+- Owner/Manager/Staff may list, look up and redeem within their verified business
+- No API for arbitrary frontend issuance; QR lookup/duplicate/inactive visits issue nothing
+- Atomic transaction includes counter/active/customer revision condition, visit,
+  voucher records, reward locks and code locks; no partial visit/reward persistence
+- VOUCHER#<customer UUID>#<voucher UUID> rows and paginated per-customer Queries
+- REWARD#<customer UUID>#LOYALTY_10#<cycle> locks and
+  REWARD#<customer UUID>#BIRTHDAY_20#<birthday year> locks
+- VCODE#<random code> VOUCHER_CODE records for atomic uniqueness and lookup
+- Codes have 100-bit randomness, human-readable grouping, no PII; no Scan/GSI
+- Conditional ACTIVE/unexpired redemption sets REDEEMED and trusted user/time
+- UI rewards, profile vouchers and code lookup/redemption; no printing
+- Existing customer, phone, QR, visit and private media attributes preserved
+- AWS-independent rule, concurrency, expiry, role, tenant, SDK and frontend tests
+
+No backfill/resource/configuration change is needed. Past 5A milestones are not
+retroactively rewarded; existing counts/history are preserved. A lost response
+may hide a committed result: refresh history/vouchers; daily/reward/redemption
+conditions prevent retries creating duplicate rewards or redemptions. Expiry
+is effective, not persisted by a scheduled task. Server request timestamps are
+trusted; clocks must be synchronized. Per-business timezone/programme settings,
+full audits, refunds/voiding and historical remediation remain future work.
+See README for exact live acceptance steps and current limitations.
 
 # Future Milestones
 
-## Milestone 5B
-Voucher generation and redemption
+## Milestone 5C
+Daily Raffle entries
+
+## Milestone 5D
+Receipt printing and Windows/Epson print agent
 
 ## Milestone 7
 Twilio messaging and birthday automation

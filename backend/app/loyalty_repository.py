@@ -81,7 +81,7 @@ class DynamoLoyaltyMixin:
             if not page.get('LastEvaluatedKey'): return sorted(history, key=lambda visit: visit.visit_number)
             params['ExclusiveStartKey'] = page['LastEvaluatedKey']
 
-    def record_visit(self, visit):
+    def record_visit(self, visit, reward_factory=None):
         visit = normalize_visit(visit)
         # Read counter BEFORE strongly consistent history. A competing commit
         # either appears in history or invalidates the transaction's counter CAS.
@@ -92,6 +92,12 @@ class DynamoLoyaltyMixin:
                    for previous in self.visits(visit.business_id, visit.customer_id)):
                 raise DuplicateVisit()
             saved = visit.model_copy(update={'visit_number': count + 1})
+            vouchers = reward_factory(self._customer(item), saved, count + 1, self.reward_exists) if reward_factory else []
+            if len({voucher.voucher_code for voucher in vouchers}) != len(vouchers):
+                # A transaction cannot address a code-lock item twice. Regenerate
+                # both candidate codes before writing anything.
+                if attempt + 1 < self.MAX_TRANSACTION_ATTEMPTS: continue
+                raise StorageUnavailable()
             data = saved.model_dump(mode='json')
             data.update(customer_id=f'VISIT#{visit.customer_id}#{visit.visit_id}', owner_customer_id=visit.customer_id, item_type='VISIT')
             count_condition = 'attribute_not_exists(#count)' if count == 0 and 'loyalty_total_visits' not in item else '#count = :expected'
@@ -104,10 +110,16 @@ class DynamoLoyaltyMixin:
                       'ExpressionAttributeValues': self._encode(values)}}
             put = {'Put': {'TableName': self.table_name, 'Item': self._encode(data),
                    'ConditionExpression': 'attribute_not_exists(#pk)', 'ExpressionAttributeNames': {'#pk': 'business_id'}}}
-            transaction = {'TransactItems': [update, put], 'ClientRequestToken': str(uuid4())}
+            # Reward eligibility uses the actual persisted DOB. If a manager edits
+            # the customer concurrently, retry the whole decision using that DOB.
+            if reward_factory:
+                update['Update']['ConditionExpression'] += ' AND #updated = :updated'
+                update['Update']['ExpressionAttributeNames']['#updated'] = 'updated_at'
+                update['Update']['ExpressionAttributeValues'].update(self._encode({':updated': item['updated_at']}))
+            transaction = {'TransactItems': [update, put] + self._reward_transactions(vouchers), 'ClientRequestToken': str(uuid4())}
             try:
                 self.client.transact_write_items(**transaction)
-                return self._customer(item), saved, count + 1
+                return self._customer(item), saved, count + 1, vouchers
             except ClientError as exc:
                 code = exc.response.get('Error', {}).get('Code')
                 reasons = exc.response.get('CancellationReasons', [])

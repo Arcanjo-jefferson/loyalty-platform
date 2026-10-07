@@ -3,6 +3,7 @@ import { apiRequest } from '../api'
 import { createVisitFlow } from '../visitFlow'
 import CustomerPhoto from './CustomerPhoto'
 import Notification from './Notification'
+import { rewardMessages } from '../voucherFlow'
 
 export default function VisitScanner() {
   const [token, setToken] = useState('')
@@ -17,8 +18,8 @@ export default function VisitScanner() {
     <Notification message={state.error} variant="error" /><Notification message={state.notice} />
     {result && <div className="visit-customer"><div className="profile-identity"><CustomerPhoto key={result.customer.customer_id} customer={result.customer} /><div><h2>{result.customer.first_name} {result.customer.last_name}</h2><p>{result.customer.phone}</p><a href={`#/customers/${result.customer.customer_id}`}>Open customer profile</a></div></div>
       <div className="loyalty-progress"><strong>Loyalty progress {result.progress} / 5</strong><progress max="5" value={result.progress} aria-label="Loyalty visits towards next reward" /><p>{result.total_visits} total visits · {result.visits_until_reward} visits until the next reward</p></div>
-      {state.stage === 'confirmed' && result.reward_earned && <p className="reward-earned">€10 reward earned</p>}
-      {state.stage === 'confirmed' && result.reward_earned && <p>No voucher has been issued.</p>}
+      {state.stage === 'confirmed' && rewardMessages(result.vouchers).map(message => <p className="reward-earned" key={message}>{message}</p>)}
+      {state.stage === 'confirmed' && result.vouchers?.length > 0 && <a href={`#/customers/${result.customer.customer_id}`}>View issued vouchers on customer profile</a>}
       <button type="button" className="primary" disabled={state.stage !== 'ready'} onClick={() => flow.confirm()}>{state.stage === 'confirming' ? 'Recording visit…' : state.stage === 'confirmed' ? 'Visit confirmed' : 'Confirm visit'}</button>
       {state.stage === 'confirmed' && <button type="button" className="secondary" onClick={() => { setToken(''); flow.clear() }}>Scan next customer</button>}
     </div>}
