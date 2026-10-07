@@ -687,7 +687,7 @@ permissions, endpoints and manual acceptance procedure.
 - UTC timestamp plus local_visit_date and business_timezone on new visits
 - Legacy timestamps establish local date without backfill; history/counts preserved
 - Both repositories enforce the daily rule; no rolling time-window configuration
-- Future Daily Raffle eligibility will share this rule; no raffle creation yet
+- Milestone 5C now uses this same date rule for atomic Daily Raffle creation
 - Lifetime count, progress=count % 5, visits_until_reward=5-progress;
   reward_earned true only for positive multiples of five
 - Fifth visit reports 0/5 progress; Milestone 5B now issues an actual €10 voucher
@@ -697,7 +697,7 @@ permissions, endpoints and manual acceptance procedure.
 
 See README for endpoints, explicit backfill commands and live acceptance steps.
 Milestone 5B below adds loyalty/birthday vouchers. QR generation is added in 5B.1 below. No printing,
-raffle/Epson integration or later milestone has been implemented. Full customer edit audit logs remain
+Epson integration or other later milestone has been implemented; 5C below adds digital raffle entries. Full customer edit audit logs remain
 future work; visits retain their authenticated recorder and server timestamp.
 
 # Milestone 5B — IMPLEMENTED; LIVE VOUCHER ACCEPTANCE PENDING
@@ -760,13 +760,48 @@ Public links are bearer credentials, not authenticated identity or automatic
 visit authorization. Downloaded old images remain visible but invalid for lookup
 after rotation. HTTPS, reference-log redaction and abuse controls belong in
 production hardening. Generic public branding avoids disclosing customer names.
-No Twilio, raffle, printing or Honeywell drivers are implemented. See README for
+No Twilio, printing or Honeywell drivers are implemented. Milestone 5C below adds digital raffle entries. See README for
 endpoints, setup and exact manual acceptance procedure.
 
-# Future Milestones
+# Milestone 5C — IMPLEMENTED; LIVE ACCEPTANCE PENDING
 
-## Milestone 5C
-Daily Raffle entries
+- Every new valid confirmed visit creates exactly one immutable logical raffle entry
+- Entry shares the random visit UUID as its deterministic raffle_entry_id
+- Records business, customer, visit/number, Dublin raffle date/timezone, UTC
+  creation time and authenticated Cognito recorded_by; no unnecessary customer PII
+- RAFFLE#<customer UUID>#<visit UUID>, item_type RAFFLE_ENTRY
+- RAFFLE_DATE#<YYYY-MM-DD>#<customer UUID>#<visit UUID>, item_type RAFFLE_DATE_INDEX
+- Both records in the authenticated business partition; date projection repeats
+  immutable non-PII fields for efficient future date reporting without a Scan/GSI
+- Counter + visit + raffle + date projection + eligible vouchers/reward/code locks
+  commit in one conditional DynamoDB transaction; any failure rolls back everything
+- Existing active/daily/counter/revision/reward conditions and bounded retries retained
+- Memory repository mirrors atomic operation under its existing lock
+- Lookup/rejected visits/redemption/QR regeneration create no raffle entries
+- Authenticated GET /customers/{id}/raffle-entries for Owner/Manager/Staff;
+  no direct-create, public raffle, date-report or winner-selection endpoint
+- Confirm response includes committed raffle_entry; UI shows separate visit/raffle/rewards
+- Loyalty visits identifies by QR or reused business directory name/phone search
+- Manual selection reads existing customer visit/progress endpoint and writes nothing
+- Both methods use the same existing Confirm Visit POST/atomic transaction
+- Compact name/phone results, inactive selection protection and clear/change controls
+- No manual-visit endpoint or changes to backend eligibility/authorization rules
+- Profile displays ten recent entries with dates/Dublin time/visit number and refresh
+- Repository/internal service supports business + date Query for future reporting
+- No automatic historic backfill, counter/history changes or AWS resource changes
+- No new dependency/configuration; existing synthetic historical seed creates no raffle
+- AWS-independent rollback, concurrency, rewards, DST, role/tenant, SDK and UI tests
+
+Two physical records represent one logical entry. The date projection adds one
+small write/storage record; no customer name/phone is duplicated. Future printing
+resolves customer PII when preparing a job. Current history Query pagination is
+internal; the API returns retained history and the UI displays ten newest entries.
+Large-volume cursor pagination/retention/reporting remain future work. An ambiguous
+committed response can produce a daily-duplicate error on retry; refresh history
+for reconciliation. No printing, raffle draw, exports, print jobs or Twilio added.
+See README for setup and exact manual acceptance steps. No migration is required.
+
+# Future Milestones
 
 ## Milestone 5D
 Receipt printing and Windows/Epson print agent

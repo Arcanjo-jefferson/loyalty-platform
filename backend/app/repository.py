@@ -2,9 +2,10 @@ from copy import deepcopy
 from datetime import datetime
 from threading import RLock
 from typing import Protocol
-from .models import Customer, Visit, Voucher
+from .models import Customer, Visit, Voucher, RaffleEntry
 from .voucher_rules import effective_voucher, reward_key
 from .visit_dates import normalize_visit, local_visit_date
+from .raffle import raffle_for_visit
 
 
 class DuplicatePhone(Exception):
@@ -33,7 +34,7 @@ class InactiveCustomer(Exception):
 
 class CustomerRepository(Protocol):
     def find_active_by_qr(self, business_id: str, qr_token: str) -> Customer | None: ...
-    def record_visit(self, visit: Visit, reward_factory=None) -> tuple[Customer, Visit, int, list[Voucher]]: ...
+    def record_visit(self, visit: Visit, reward_factory=None) -> tuple[Customer, Visit, int, list[Voucher], RaffleEntry]: ...
     def manage_qr(self, business_id: str, customer_id: str, *, expected_token: str | None = None): ...
     def public_qr_token(self, reference: str) -> str: ...
     def reward_exists(self, business_id: str, key: str) -> bool: ...
@@ -41,6 +42,8 @@ class CustomerRepository(Protocol):
     def get_voucher(self, business_id: str, customer_id: str, voucher_id: str) -> Voucher: ...
     def lookup_voucher(self, business_id: str, code: str) -> Voucher: ...
     def redeem_voucher(self, business_id: str, customer_id: str, voucher_id: str, now: datetime, subject: str) -> Voucher: ...
+    def raffle_entries(self, business_id: str, customer_id: str) -> list[RaffleEntry]: ...
+    def raffle_entries_for_date(self, business_id: str, raffle_date) -> list[RaffleEntry]: ...
     def visits(self, business_id: str, customer_id: str) -> list[Visit]: ...
     def total_visits(self, business_id: str, customer_id: str) -> int: ...
     def get_media(self, business_id: str, customer_id: str, kind: str) -> dict | None: ...
@@ -61,6 +64,7 @@ class InMemoryCustomerRepository:
         self._media = {}
         self._qr = {}
         self._visits = {}
+        self._raffle_entries = {}
         self._vouchers = {}
         self._reward_locks = {}
         self._voucher_codes = {}
@@ -138,12 +142,28 @@ class InMemoryCustomerRepository:
                 if len(set(codes)) == len(codes) and not any((visit.business_id, code) in self._voucher_codes for code in codes):
                     break
             else: raise StorageUnavailable()
+            entry = raffle_for_visit(saved)
+            entry_key = (entry.business_id, entry.customer_id, entry.visit_id)
+            if entry_key in self._raffle_entries: raise ConcurrentModification()
             for voucher in vouchers:
                 self._vouchers[(voucher.business_id, voucher.customer_id, voucher.voucher_id)] = voucher.model_copy(deep=True)
                 self._reward_locks[(voucher.business_id, reward_key(voucher))] = voucher.voucher_id
                 self._voucher_codes[(voucher.business_id, voucher.voucher_code)] = (voucher.customer_id, voucher.voucher_id)
             self._visits[(visit.business_id, visit.visit_id)] = saved
-            return customer, saved, saved.visit_number, vouchers
+            self._raffle_entries[entry_key] = entry
+            return customer, saved, saved.visit_number, vouchers, entry
+
+    def raffle_entries(self, business_id, customer_id):
+        with self._lock:
+            return sorted([entry.model_copy(deep=True) for entry in self._raffle_entries.values()
+                           if entry.business_id == business_id and entry.customer_id == customer_id],
+                          key=lambda entry: (entry.created_at, entry.raffle_entry_id), reverse=True)
+
+    def raffle_entries_for_date(self, business_id, raffle_date):
+        with self._lock:
+            return sorted([entry.model_copy(deep=True) for entry in self._raffle_entries.values()
+                           if entry.business_id == business_id and entry.raffle_date == raffle_date],
+                          key=lambda entry: (entry.created_at, entry.raffle_entry_id), reverse=True)
 
     def reward_exists(self, business_id, key):
         with self._lock: return (business_id, key) in self._reward_locks

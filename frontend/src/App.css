@@ -56,3 +56,16 @@
 .qr-confirm { padding: 16px; border: 1px solid #d5dfd9; border-radius: 8px; margin-top: 16px; }.qr-confirm button { margin: 8px 8px 0 0; }
 .public-qr { max-width: 440px; margin: 20px auto; padding: 16px; }.public-qr .loyalty-qr-image { margin: 20px auto; }
 @media (max-width: 600px) { .customer-qr { padding: 20px; } }
+
+.customer-raffle { padding: 25px; }
+.customer-raffle h2 { margin-top: 0; }
+.customer-raffle ol { padding-left: 22px; margin-bottom: 0; }
+.customer-raffle li { margin-top: 10px; overflow-wrap: anywhere; }
+@media (max-width: 600px) { .customer-raffle { padding: 20px; } }
+
+.lookup-or { text-align: center; font-weight: 700; margin: 20px 0; }
+.manual-customer-results { list-style: none; padding: 0; margin: 12px 0; }
+.manual-customer-results li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid #e2e8f0; }
+.manual-customer-results span { display: block; overflow-wrap: anywhere; }
+.manual-customer-results button { flex-shrink: 0; }
+@media (max-width: 600px) { .manual-customer-results li { flex-wrap: wrap; } }
