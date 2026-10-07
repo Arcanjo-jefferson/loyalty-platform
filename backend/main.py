@@ -1,6 +1,8 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from app.raffle_routes import router as raffle_router
+from app.raffle import RaffleService
 from app.qr_routes import router as qr_router
 from app.qr_service import QRService
 from app.qr_repository import QRNotFound
@@ -32,6 +34,8 @@ def create_app(repository=None, token_verifier=None, media_storage=None):
     # Specific visit routes must precede the media category catch-all.
     app.state.voucher_service = VoucherService(app.state.customer_service)
     app.state.qr_service = QRService(app.state.customer_service)
+    app.state.raffle_service = RaffleService(app.state.customer_service)
+    app.include_router(raffle_router)
     app.include_router(qr_router)
     app.include_router(voucher_router)
     app.include_router(loyalty_router)

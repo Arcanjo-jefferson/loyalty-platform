@@ -5,6 +5,7 @@ from uuid import uuid4
 from botocore.exceptions import BotoCoreError, ClientError
 from pydantic import ValidationError
 from .models import Visit
+from .raffle import raffle_for_visit
 from .visit_dates import normalize_visit, local_visit_date
 from .repository import ConcurrentModification, DuplicateQR, DuplicateVisit, InactiveCustomer, StorageUnavailable
 
@@ -116,10 +117,11 @@ class DynamoLoyaltyMixin:
                 update['Update']['ConditionExpression'] += ' AND #updated = :updated'
                 update['Update']['ExpressionAttributeNames']['#updated'] = 'updated_at'
                 update['Update']['ExpressionAttributeValues'].update(self._encode({':updated': item['updated_at']}))
-            transaction = {'TransactItems': [update, put] + self._reward_transactions(vouchers), 'ClientRequestToken': str(uuid4())}
+            entry = raffle_for_visit(saved)
+            transaction = {'TransactItems': [update, put] + self._raffle_transactions(entry) + self._reward_transactions(vouchers), 'ClientRequestToken': str(uuid4())}
             try:
                 self.client.transact_write_items(**transaction)
-                return self._customer(item), saved, count + 1, vouchers
+                return self._customer(item), saved, count + 1, vouchers, entry
             except ClientError as exc:
                 code = exc.response.get('Error', {}).get('Code')
                 reasons = exc.response.get('CancellationReasons', [])

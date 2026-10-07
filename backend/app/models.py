@@ -1,8 +1,8 @@
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Literal
 from zoneinfo import ZoneInfo
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class CustomerInput(BaseModel):
@@ -90,3 +90,32 @@ class Voucher(BaseModel):
     expires_at: datetime
     redeemed_at: datetime | None = None
     redeemed_by: str | None = None
+
+
+class RaffleEntry(BaseModel):
+    model_config = ConfigDict(frozen=True, extra='forbid')
+    business_id: str
+    raffle_entry_id: str
+    customer_id: str
+    visit_id: str
+    raffle_date: date
+    created_at: datetime
+    recorded_by: str
+    visit_number: int = Field(gt=0)
+    business_timezone: Literal['Europe/Dublin']
+    item_type: Literal['RAFFLE_ENTRY'] = 'RAFFLE_ENTRY'
+
+    @field_validator('created_at')
+    @classmethod
+    def aware_creation_time(cls, value):
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError('Raffle creation timestamp must include a timezone.')
+        return value.astimezone(timezone.utc)
+
+    @model_validator(mode='after')
+    def consistent_visit_date(self):
+        if self.raffle_date != self.created_at.astimezone(ZoneInfo(self.business_timezone)).date():
+            raise ValueError('Raffle date must match its business-local creation date.')
+        if self.raffle_entry_id != self.visit_id:
+            raise ValueError('Raffle entry identity must match its qualifying visit.')
+        return self

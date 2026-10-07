@@ -2,7 +2,7 @@
 
 A local MVP for a future multi-business customer loyalty and SMS marketing platform. The project is designed to give managers a customer directory and, tools for recording visits and, in later milestones, issuing rewards and communicating with customers who have opted into marketing.
 
-**Current status: Milestones 1–3 completed and manually verified against AWS by the project owner; Milestone 4 profile-photo storage/retrieval manually verified; Milestone 5A complete; Milestone 5B voucher engine implemented; Milestone 5B.1 QR management implemented, awaiting live acceptance.** The application runs locally with a React manager dashboard and a FastAPI customer API. Customer persistence is configurable between DynamoDB and an optional in-memory repository. Cognito business-user login and server-side role/tenant authorization are implemented. Private customer images, camera capture and ID verification are implemented. QR lookup, explicit visit confirmation and loyalty progress are implemented. Automatic €10 loyalty/€20 birthday vouchers and redemption are implemented; SMS sending remains planned. DynamoDB persistence was manually verified by the project owner.
+**Current status: Milestones 1–3 completed and manually verified against AWS by the project owner; Milestone 4 profile-photo storage/retrieval manually verified; Milestone 5A complete; Milestone 5B voucher engine implemented; Milestone 5B.1 QR management implemented; Milestone 5C Daily Raffle implemented, awaiting live acceptance.** The application runs locally with a React manager dashboard and a FastAPI customer API. Customer persistence is configurable between DynamoDB and an optional in-memory repository. Cognito business-user login and server-side role/tenant authorization are implemented. Private customer images, camera capture and ID verification are implemented. QR lookup, explicit visit confirmation and loyalty progress are implemented. Automatic €10 loyalty/€20 birthday vouchers, redemption and atomic Daily Raffle entries are implemented; SMS sending remains planned. DynamoDB persistence was manually verified by the project owner.
 
 ## Implemented features
 
@@ -346,14 +346,13 @@ Live Cognito acceptance has not been performed by the automated tests; no real u
 
 ## Planned development roadmap
 
-Milestone 2 persistence has been manually verified by the project owner. Milestone 3 Cognito integration and current customer authorization are manually verified. Milestone 4 profile-photo storage/retrieval is manually verified. Milestone 5A QR lookup and visit tracking is complete. Milestone 5B automatic vouchers and redemption is implemented; live acceptance is pending. The following later milestones are **not implemented**, following `PROJECT_CONTEXT.md`:
+Milestone 2 persistence has been manually verified by the project owner. Milestone 3 Cognito integration and current customer authorization are manually verified. Milestone 4 profile-photo storage/retrieval is manually verified. Milestone 5A QR lookup and visit tracking is complete. Milestone 5B automatic vouchers, Milestone 5B.1 customer QR management and Milestone 5C Daily Raffle entries are implemented; live acceptance of the new raffle workflow is pending. The following later milestones are **not implemented**, following `PROJECT_CONTEXT.md`:
 
-- **Milestone 5C:** Daily Raffle entry workflow.
 - **Milestone 5D:** receipt printing and Windows/Epson print agent.
 - **Milestone 7:** Twilio messaging, consent-aware campaigns and scheduled birthday promotions.
 - **Milestone 8:** audit/security/privacy hardening and production deployment, including future Lambda/API Gateway and hosting infrastructure.
 
-Exact boundaries may evolve. No raffle entries, printing, Twilio, scheduled birthday SMS automation or Lambda deployment is included in the current implementation.
+Exact boundaries may evolve. No raffle winner selection, printing, Twilio, scheduled birthday SMS automation or Lambda deployment is included in the current implementation.
 
 ### Retrying a temporary-password sign-in
 
@@ -615,8 +614,7 @@ Same-date confirmation returns 409 with
 `A loyalty visit has already been recorded for this customer today.`
 The frontend displays this message without success feedback. Rejection changes
 neither the count nor history. Customer edits preserve loyalty/media metadata.
-There is no cooldown setting. The date rule will also inform future Daily Raffle
-eligibility, but no raffle entry is created. Milestone 5B now issues qualifying vouchers in the same visit transaction.
+There is no cooldown setting. Milestone 5C now creates one Daily Raffle entry with every new valid visit using this same date rule. Milestone 5B now issues qualifying vouchers in the same visit transaction.
 
 Threshold is five: `progress=total_visits % 5`, `visits_until_reward=5-progress`,
 `reward_earned=total_visits > 0 and progress == 0`. Visit five returns 5/0/5/true;
@@ -839,9 +837,8 @@ Effective EXPIRED is computed rather than persisted. Expiry is evaluated against
 the server request timestamp; keep server clocks synchronized. Transactions
 received just before midnight are judged at that trusted timestamp.
 
-**Milestone 5C Daily Raffle entries and Milestone 5D receipt/Windows/Epson
-printing remain deferred.** There is no `window.print()`, print agent, raffle
-entry, Twilio message, scheduled birthday automation or AWS deployment added.
+**Milestone 5D receipt/Windows/Epson printing remains deferred.** There is no
+`window.print()`, print agent, raffle draw, Twilio message, scheduled birthday automation or AWS deployment added.
 
 
 ### Development-only four-visit acceptance seed
@@ -954,4 +951,161 @@ images encode the exact raw token accepted by the existing scanner workflow.
    regeneration API access returns 403. Repeat business-isolation checks with
    an existing separate-business account. Inactive customers' public links fail.
 
-No Twilio, raffle, printing, scanner drivers or changes to reward rules are added.
+Milestone 5B.1 adds no Twilio, raffle, printing, scanner drivers or changes to reward rules. Milestone 5C below adds digital raffle entries.
+
+
+## Milestone 5C: Daily Raffle
+
+Every new successfully confirmed loyalty visit creates exactly one immutable
+logical Daily Raffle entry. Creation is part of the same authoritative operation
+as the visit, lifetime counter update and any €10 loyalty/€20 birthday vouchers.
+The existing Dublin calendar-date, active-customer and reward rules are unchanged.
+Lookup, duplicate/rejected visits, QR regeneration and redemption create no entries.
+
+### Storage and transaction design
+
+The existing table and business partition are reused. Each logical entry has two
+physical rows, both written together:
+
+| Sort key (`customer_id`) | Item type | Purpose |
+| --- | --- | --- |
+| `RAFFLE#<customer UUID>#<visit UUID>` | `RAFFLE_ENTRY` | Authoritative customer history and deterministic visit uniqueness |
+| `RAFFLE_DATE#<YYYY-MM-DD>#<customer UUID>#<visit UUID>` | `RAFFLE_DATE_INDEX` | Immutable non-PII date projection for future business/date reporting |
+
+`raffle_entry_id` is the existing random visit UUID, ensuring a deterministic
+one-to-one relationship. Each row stores business, owner customer, visit,
+visit number, Dublin raffle date/timezone, UTC creation time and authenticated
+Cognito subject. It contains no name, phone, DOB, email, QR credential or media.
+The projection repeats only these immutable fields, avoiding a read per entrant.
+Customer name/phone can be resolved later when preparing a print job.
+
+One conditional transaction commits the customer counter update, VISIT row,
+RAFFLE_ENTRY row, date projection and any voucher/reward/code-lock rows. Both
+raffle puts require absent keys. A normal visit uses four actions; a fifth visit
+uses seven; a combined loyalty/birthday reward uses ten. Existing active status,
+optimistic counter/revision, daily history and reward/code conditions remain.
+Any failed condition/write rolls back the entire transaction. In-memory mode
+mirrors the operation under its existing lock. Retries may return the existing
+daily-duplicate error after an ambiguous committed response; refreshing history
+shows the committed entry. Retrying never adds another entry or reward.
+
+Customer and date retrieval use paginated strongly consistent `Query` with an
+exact business partition and the relevant sort-key prefix. No Scan, GSI, new
+table, IAM changes or other AWS resource creation is needed. Internal raffle
+rows never appear in customer API/list results.
+
+### API and interface
+
+- Existing `POST /customers/{id}/visits` now includes `raffle_entry` alongside
+  customer, visit, progress and vouchers. Its body remains `{}`; business,
+  recorder, date and timestamp are server-owned.
+- New authenticated `GET /customers/{id}/raffle-entries` returns newest-first
+  immutable entry models, without storage keys. Owner, Manager and Staff may
+  view their own business's customer history; missing/other-business customers
+  return 404 and unauthenticated requests return 401. Responses are no-store.
+- Repository `raffle_entries_for_date(business_id, date)` and internal service
+  `for_date` prepare for reporting. No date-report/draw/public raffle endpoint
+  or direct-create endpoint is added in 5C.
+
+Loyalty visits displays separate checkmarked visit, Daily Raffle and eligible
+voucher success messages, only after confirmation succeeds. The customer
+profile adds a padded **Daily Raffle** card showing the ten most recent entries,
+Dublin raffle date/time and associated visit number, with loading, empty, error
+and refresh states. History uses the existing authenticated transport.
+
+### Setup, history and limitations
+
+No new dependency or environment variable is required. Restart the backend after
+updating code; reload the frontend (Vite normally hot reloads). No migration or
+backfill is required or run. Old visits remain untouched and have no raffle;
+creation starts with new confirmed visits after 5C deployment. The explicit
+four-visit acceptance seed remains historical test tooling and creates no raffle;
+the next normal fifth visit creates its raffle and eligible rewards atomically.
+
+The immutable date projection costs one additional small write/storage record
+per entry. Queries scale with a customer's retained history or a single day's
+entries, not the entire table. The current history endpoint follows DynamoDB
+pagination internally but returns all entries; the UI shows ten. Public cursor
+pagination/retention and large-volume reporting are future work. Existing
+customer list Queries still consume reads for filtered internal business rows.
+No winner selection, exports, ticket printing, print jobs/agent, browser printing,
+Twilio, or new public data access is implemented. Server clocks must remain
+synchronized. Future business-specific timezone settings remain deferred.
+
+### Exact live acceptance procedure
+
+1. Restart FastAPI using the existing Cognito/DynamoDB/S3 configuration and
+   `uvicorn main:app --reload` from `backend/` with the existing venv activated.
+   Start/reload Vite from `frontend/` using `npm run dev`. Do not change AWS
+   resources. Use fictional customers and existing business-user logins.
+2. Select a fictional active customer who has not visited today in Dublin.
+   Existing customers with old visits should initially show no raffle history.
+   If already visited today before deployment, use a new fictional customer or
+   wait for the next Dublin date; do not delete history or bypass the daily rule.
+3. Open **Loyalty visits**, scan/type the existing QR, and look up the customer.
+   Open their profile in another tab: lookup must create no visit or raffle.
+4. Click **Confirm visit** once. Expect separate **Visit recorded successfully**
+   and **Daily Raffle entry created** messages. Open the profile and refresh
+   raffle history: one entry shows today's Dublin date and the visit number.
+5. Repeat lookup/confirmation today, including two tabs. Expect the existing
+   daily-duplicate error and no new entry, counter increment or voucher.
+6. Read-only DynamoDB verification: in the existing table use Query, partition
+   `business_id=trumps`, sort-key prefix `RAFFLE#<fictional-customer-UUID>#`.
+   There must be exactly one RAFFLE_ENTRY per new valid visit. Query prefix
+   `RAFFLE_DATE#<today-in-Dublin-YYYY-MM-DD>#` in the same partition: the matching
+   RAFFLE_DATE_INDEX row has the same raffle/visit IDs and recorded_by Cognito
+   subject. These two physical rows represent one logical entry. Do not expose
+   JWTs or real customer records to inspect attribution.
+7. For fifth-visit acceptance, use an eligible fictional customer with four
+   historical visits (or the documented dry-run/apply acceptance seed on a new
+   zero-visit fictional customer). Confirm normally: expect one raffle plus the
+   €10 voucher, progress 0/5 and retained history. Seeded historical visits must
+   not appear in raffle history.
+8. With a separate fictional adult customer's birthday in this Dublin week,
+   confirm a valid visit: expect one raffle and the €20 birthday voucher. With
+   four historical visits and a birthday this week, expect one raffle and both
+   vouchers; existing birthday/year and expiry rules still apply.
+9. Redeem a voucher and regenerate QR as Owner/Manager; refresh raffle history:
+   neither action adds an entry. Deactivate a separate fictional customer and
+   verify confirmation is rejected without a raffle.
+10. Repeat history access as Owner, Manager and Staff. Log out: history access
+    must fail. Using an existing separate-business user, the original customer
+    history must return 404; no internal raffle rows should appear in the directory.
+
+Automated coverage uses memory/fake DynamoDB, deliberate conditional/storage
+failures, concurrent attempts, DST clocks and SDK stubs. Real AWS/browser
+acceptance is intentionally manual; no live raffle entries were created by tests.
+
+
+### Milestone 5C acceptance improvement: manual visit lookup
+
+**Loyalty visits** now offers **Scan customer QR** or **Find customer** by name
+or phone. The manual search calls the existing authenticated `GET /customers`
+directory only on Search submission, reusing the exact directory search helper
+for first/last/full names, partial phones and equivalent Irish representations
+(`0831234567`, `831234567`, `+353831234567`, `353831234567`). No extra backend
+search or manual-visit endpoint is introduced. Form phone validation is unchanged.
+
+Compact results display name, phone and active/inactive state. Selecting an
+active result uses the existing read-only `GET /customers/{id}/visits` to load
+fresh customer information and loyalty progress into the same confirmation panel
+used by QR lookup, including the protected profile photo. Inactive results cannot
+be selected; fresh deactivation and backend inactive checks remain enforced.
+**Clear / change customer** and a new search allow correcting the selection.
+
+Search and selection create no visits, raffle entries or vouchers. Both lookup
+methods use the same **Confirm visit** action and existing
+`POST /customers/{id}/visits` with `{}`. Daily Dublin eligibility, identity, tenant
+checks, atomic visit/raffle/reward writes and success messages remain unchanged.
+No frontend-supplied business or recorder is used. The current small-business MVP
+queries the existing business directory for each explicit search; server-side
+search/pagination can be added later if directory volume grows.
+
+Manual acceptance: search a fictional customer by first/last/full name and each
+phone format; choose among multiple matches; verify the panel's name, phone,
+photo and progress. Check history is unchanged before confirmation. Confirm once,
+expect visit/raffle and eligible reward messages, then repeat today and expect
+the existing duplicate error. Clear/change selection and verify QR lookup still
+works. Repeat with Owner, Manager and Staff; separate-business users must not
+see/select the original customer. No migration, configuration or AWS changes
+are needed; reload Vite for this frontend improvement.
