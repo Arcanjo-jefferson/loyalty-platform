@@ -6,7 +6,8 @@ import signal
 import threading
 from .worker import Worker, Journal, simulate
 from .printer import WindowsPrinter
-from .transport import HTTPTransport
+from .transport import HTTPTransport, SecureTransport
+from .oauth import TokenProvider, WindowsCredentialStore
 
 
 def main():
@@ -24,12 +25,19 @@ def main():
     if mode == 'simulation':
         simulate(base / config.get('fixture', 'tickets.example.json'), directory)
         return
-    if mode != 'development-windows' or config.get('allow_development_printing') is not True:
-        raise ValueError('Production transport is blocked. Explicit isolated development printing opt-in required.')
+    if mode not in {'development-windows','windows'}:
+        raise ValueError('Unsupported agent mode.')
+    if config.get('allow_physical_printing' if mode=='windows' else 'allow_development_printing') is not True:
+        raise ValueError('Explicit physical printing opt-in required.')
     interval = float(config.get('poll_seconds', 3))
     timeout = float(config.get('timeout_seconds', 10))
     if not 1 <= interval <= 60 or not 1 <= timeout <= 30: raise ValueError('Invalid polling/HTTP timeout.')
-    transport = HTTPTransport(config['backend_url'], timeout)
+    if mode == 'windows':
+        provider=TokenProvider(config['token_url'],config['client_id'],config['scope'],
+            WindowsCredentialStore(config['credential_target']),timeout)
+        transport=SecureTransport(config['backend_url'],provider,timeout)
+    else:
+        transport = HTTPTransport(config['backend_url'], timeout)
     printer = WindowsPrinter(config['printer_name'])
     journal = Journal(directory / 'output.sqlite3')
     stop = threading.Event()

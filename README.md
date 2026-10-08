@@ -2,7 +2,7 @@
 
 A local MVP for a future multi-business customer loyalty and SMS marketing platform. The project is designed to give managers a customer directory and, tools for recording visits and, in later milestones, issuing rewards and communicating with customers who have opted into marketing.
 
-**Current status: Milestones 1–3 completed and manually verified against AWS by the project owner; Milestone 4 profile-photo storage/retrieval manually verified; Milestone 5A complete; Milestone 5B voucher engine implemented; Milestone 5B.1 QR management implemented; Milestone 5C Daily Raffle implemented; Milestone 5D.1 durable print queue and ticket generation implemented, awaiting live acceptance; Milestone 5D.2A Windows development agent implemented, awaiting production device provisioning and onsite printer acceptance.** The application runs locally with a React manager dashboard and a FastAPI customer API. Customer persistence is configurable between DynamoDB and an optional in-memory repository. Cognito business-user login and server-side role/tenant authorization are implemented. Private customer images, camera capture and ID verification are implemented. QR lookup, explicit visit confirmation and loyalty progress are implemented. Automatic €10 loyalty/€20 birthday vouchers, redemption and atomic Daily Raffle entries are implemented; SMS sending remains planned. DynamoDB persistence was manually verified by the project owner.
+**Current status: Milestones 1–3 completed and manually verified against AWS by the project owner; Milestone 4 profile-photo storage/retrieval manually verified; Milestone 5A complete; Milestone 5B voucher engine implemented; Milestone 5B.1 QR management implemented; Milestone 5C Daily Raffle implemented; Milestone 5D.1 durable print queue and ticket generation implemented, awaiting live acceptance; Milestone 5D.2A Windows development agent implemented, awaiting production device provisioning and onsite printer acceptance; Milestone 5D.3 secure authentication/connectivity integration implemented with provisioning pending.** The application runs locally with a React manager dashboard and a FastAPI customer API. Customer persistence is configurable between DynamoDB and an optional in-memory repository. Cognito business-user login and server-side role/tenant authorization are implemented. Private customer images, camera capture and ID verification are implemented. QR lookup, explicit visit confirmation and loyalty progress are implemented. Automatic €10 loyalty/€20 birthday vouchers, redemption and atomic Daily Raffle entries are implemented; SMS sending remains planned. DynamoDB persistence was manually verified by the project owner.
 
 ## Implemented features
 
@@ -1303,4 +1303,37 @@ Windows RAW Epson adapter, durable restart fence and mocked tests. See
 was attempted. Spool acceptance records UNCERTAIN rather than claiming paper output.
 An isolated, disabled-by-default loopback/in-memory device transport is implemented;
 production device enrollment/authentication remains a deployment blocker. The worker
-cannot consume live DynamoDB jobs and never uses Owner/Manager credentials.
+development transport cannot consume live DynamoDB jobs and never uses Owner/Manager
+credentials. 5D.3 below adds HTTPS integration requiring explicit provider provisioning.
+
+### Milestone 5D.3 — secure device authentication integration
+
+Implemented: separate Cognito access-token validation for confidential M2M devices,
+server-controlled device/client/business registry, Owner-only register/list/disable/
+rotation-pending APIs, operator binding tool, HTTPS token acquisition/renewal and
+Windows Credential Manager storage. Human authentication remains ID-token based;
+agents cannot access customer/media/admin endpoints or acknowledge physical completion.
+See [provisioning, configuration, permissions and acceptance](print-agent/README.md#milestone-5d3--secure-connectivity-integration-provisioning-pending).
+
+Existing public SRP SPA configuration cannot supply client credentials. Future
+provisioning requires a Cognito custom resource server/scope, token domain and a
+unique confidential client-credentials-only client per device (recommended five-minute
+tokens), plus a valid HTTPS backend. **None was provisioned or verified live.**
+Backend variables: `PRINT_AGENT_ISSUER`, `PRINT_AGENT_SCOPE`; production secrets reside
+only in the Windows vault. No permanent AWS credential is required on the agent.
+
+Registry records use tenant `DEVICE#UUID`/`PRINT_DEVICE` items and a reserved
+`!PRINT_DEVICES` partition with `CLIENT#client_id` bindings. New records use the
+existing table, conditional/transactional writes and strongly consistent Get/Query;
+no table/index/Scan or customer migration. Client IDs are never reassigned, including
+rotation/revocation. Registry failures fail closed. Last-seen writes use revision CAS;
+registration/revocation/rotation events live on device records, claim/start/spool-ack
+history on existing print-job audits. Protect registry IAM access; do not expose its
+reserved partition. Full centralized audit export/retention and last-seen write
+throttling remain deployment/scaling work.
+
+Owner API: GET/POST `/print-devices`; POST `/print-devices/{id}/disable|rotate`.
+Machine API: GET `/print-agent/jobs`; POST `/print-agent/jobs/{id}/claim|start|renew|fail|submitted`.
+No agent review/reprint/complete route. Owner management UI remains unimplemented;
+the API/pending-provisioning workflow is available. Provider creation, secret delivery
+and provider revocation are explicit operator steps, never automatically performed.

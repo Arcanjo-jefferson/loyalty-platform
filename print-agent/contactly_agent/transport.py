@@ -30,3 +30,22 @@ class HTTPTransport:
     def action(self, job_id, action, token=None):
         return self.request('/jobs/' + quote(job_id, safe='') + '/' + action,
                             {} if token is None else {'claim_token': token})
+
+class SecureTransport(HTTPTransport):
+    """HTTPS only. Refresh credentials before calls; never replay lifecycle writes."""
+    def __init__(self,url,provider,timeout=10,opener=direct_open):
+        from .oauth import https_url
+        self.url=https_url(url)
+        if urlparse(self.url).path.rstrip('/')!='/print-agent':
+            raise ValueError('Expected dedicated /print-agent backend boundary.')
+        self.provider,self.timeout,self.opener=provider,timeout,opener
+    def request(self,path,data=None):
+        from urllib.error import HTTPError
+        request=Request(self.url+path,data=None if data is None else json.dumps(data).encode(),
+            headers={'Authorization':'Bearer '+self.provider.token(),'Content-Type':'application/json'})
+        try:
+            with self.opener(request,timeout=self.timeout) as response: return json.load(response)
+        except HTTPError as error:
+            if error.code==401: self.provider.invalidate()
+            # No automatic write replay; worker's durable intent protects lost start.
+            raise

@@ -3,6 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.print_routes import router as print_router
 from app.print_device_routes import router as device_router
+from app.secure_print_routes import router as secure_print_router
+from app.print_devices import DeviceRegistry
+from app.print_agent_auth import AgentVerifier
 from app.print_service import PrintService
 from app.print_models import PrintJobNotFound, PrintJobConflict
 from app.raffle_routes import router as raffle_router
@@ -26,7 +29,7 @@ from app.auth import CognitoVerifier
 from app.service import CustomerNotFound, CustomerService
 
 
-def create_app(repository=None, token_verifier=None, media_storage=None):
+def create_app(repository=None, token_verifier=None, media_storage=None, agent_verifier=None):
     app = FastAPI(title='Loyalty Platform API', version='0.7.0')
     app.state.customer_service = CustomerService(repository if repository is not None else build_repository(Settings.from_environment()))
     app.add_middleware(CORSMiddleware, allow_origins=['http://localhost:5173', 'http://127.0.0.1:5173'], allow_methods=['GET', 'POST', 'PUT', 'PATCH'], allow_headers=['Content-Type', 'Authorization'])
@@ -41,7 +44,10 @@ def create_app(repository=None, token_verifier=None, media_storage=None):
     app.state.raffle_service = RaffleService(app.state.customer_service)
     app.state.print_service = PrintService(app.state.customer_service)
     app.include_router(print_router)
+    app.state.device_registry = DeviceRegistry(app.state.print_service.repository)
+    app.state.agent_verifier = agent_verifier if agent_verifier is not None else AgentVerifier.from_environment()
     app.include_router(device_router)
+    app.include_router(secure_print_router)
     app.include_router(raffle_router)
     app.include_router(qr_router)
     app.include_router(voucher_router)

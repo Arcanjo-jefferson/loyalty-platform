@@ -904,3 +904,32 @@ change.
 - No Owner/Manager credentials on agent, no new visits/rewards or public QR auth
 - Task Scheduler instructions only; no startup task, printer or driver changes
 - See print-agent/README.md for configuration, limits and onsite acceptance
+
+# Milestone 5D.3 — INTEGRATION IMPLEMENTED; PROVISIONING/LIVE ACCEPTANCE PENDING
+
+- Dedicated Cognito RS256 access-token validation: issuer, expiry/iat, token_use=access,
+  exact custom scope and registered confidential client_id resource binding
+- Cognito M2M cannot request resource-bound aud; if an audience is supplied it must
+  match the scope's resource identifier. Human ID-token validation is unchanged
+- One opaque UUID/device/business; tenant DEVICE# records and reserved !PRINT_DEVICES
+  CLIENT# directory in existing DynamoDB table, strong reads/CAS/unique transactions
+- Owner-only register/list/disable/rotation-pending API, no manager/staff/device access
+- Operator-only provider-verified binding tool, dry-run default; never handles secrets
+  or provisions/changes Cognito. Old client bindings remain non-reassignable tombstones
+- Active registry lookup on every request; disable/rotate blocks existing issued tokens
+  on subsequent authorization; in-flight operations/physical bytes cannot be recalled
+- Agent-only queue claim/start/renew/fail/submitted; no physical completion/review/reprint,
+  customer/media/marketing/staff/settings access. Stable device subject in job audit
+- HTTPS-only production transport, verified TLS, no redirects/insecure fallback;
+  short-lived OAuth client-credentials tokens cached in memory and renewed before expiry
+- Production client secrets in Windows Credential Manager under dedicated account;
+  no employee passwords, permanent AWS credentials, config secrets or token logs
+- Default local simulation and isolated memory development transport preserved
+- Signed local JWT + in-memory fictional-visit simulation + fake-DynamoDB tests only
+- Requires external custom resource-server scope/domain and per-device confidential
+  client-credentials-only provisioning, verified five-minute TTL and HTTPS deployment
+- Existing public SPA SRP client must never be used for M2M; no AWS configuration changed
+- No provisioning/live auth, vault integration on real Windows, Epson/cutting or physical
+  printing verified. Owner UI, centralized audit export/retention and last-seen write
+  throttling remain future deployment/scaling work
+- See print-agent/README.md for endpoint matrix, provisioning/rotation and acceptance

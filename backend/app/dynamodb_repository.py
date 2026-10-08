@@ -56,7 +56,7 @@ class DynamoDBCustomerRepository(DynamoLoyaltyMixin, DynamoVoucherMixin, DynamoQ
             raise StorageUnavailable() from exc
 
     def get(self, business_id, customer_id):
-        if customer_id.startswith((self.PHONE_PREFIX, 'QR#', 'VISIT#', 'VOUCHER#', 'VCODE#', 'REWARD#', 'RAFFLE#', 'RAFFLE_DATE#', 'PRINT#')):
+        if customer_id.startswith((self.PHONE_PREFIX, 'QR#', 'VISIT#', 'VOUCHER#', 'VCODE#', 'REWARD#', 'RAFFLE#', 'RAFFLE_DATE#', 'PRINT#', 'DEVICE#', 'CLIENT#')):
             return None
         item = self._read_item(business_id, customer_id)
         return self._customer(item) if item and item.get('item_type') == 'CUSTOMER' else None
@@ -75,7 +75,7 @@ class DynamoDBCustomerRepository(DynamoLoyaltyMixin, DynamoVoucherMixin, DynamoQ
             page = self._call('query', **params)
             for raw in page.get('Items', []):
                 item = self._decode(raw)
-                if item.get('item_type') == 'CUSTOMER' and not item['customer_id'].startswith((self.PHONE_PREFIX, 'QR#', 'VISIT#', 'VOUCHER#', 'VCODE#', 'REWARD#', 'RAFFLE#', 'RAFFLE_DATE#', 'PRINT#')):
+                if item.get('item_type') == 'CUSTOMER' and not item['customer_id'].startswith((self.PHONE_PREFIX, 'QR#', 'VISIT#', 'VOUCHER#', 'VCODE#', 'REWARD#', 'RAFFLE#', 'RAFFLE_DATE#', 'PRINT#', 'DEVICE#', 'CLIENT#')):
                     customers.append(self._customer(item))
             last_key = page.get('LastEvaluatedKey')
             if not last_key:
