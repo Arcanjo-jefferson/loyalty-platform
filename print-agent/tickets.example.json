@@ -1,0 +1,32 @@
+[
+  {
+    "print_job_id": "fixture.DAILY_RAFFLE",
+    "source_visit_id": "fixture-visit",
+    "created_at": "2026-10-08T12:00:00Z",
+    "ticket_type": "DAILY_RAFFLE",
+    "ticket": {
+      "receipt_text": "Trumps\nDaily Raffle\nFictional Customer\nSignature: __________________\n",
+      "receipt_columns": 42
+    }
+  },
+  {
+    "print_job_id": "fixture.LOYALTY_10",
+    "source_visit_id": "fixture-visit",
+    "created_at": "2026-10-08T12:00:00Z",
+    "ticket_type": "LOYALTY_10",
+    "ticket": {
+      "receipt_text": "Trumps\n€10 Loyalty Voucher\nTEST-LOYALTY-CODE\n",
+      "receipt_columns": 42
+    }
+  },
+  {
+    "print_job_id": "fixture.BIRTHDAY_20",
+    "source_visit_id": "fixture-visit",
+    "created_at": "2026-10-08T12:00:00Z",
+    "ticket_type": "BIRTHDAY_20",
+    "ticket": {
+      "receipt_text": "Trumps\n€20 Birthday Voucher\nTEST-BIRTHDAY-CODE\n",
+      "receipt_columns": 42
+    }
+  }
+]

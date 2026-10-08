@@ -69,3 +69,16 @@
 .manual-customer-results span { display: block; overflow-wrap: anywhere; }
 .manual-customer-results button { flex-shrink: 0; }
 @media (max-width: 600px) { .manual-customer-results li { flex-wrap: wrap; } }
+
+.print-jobs { padding: 25px; }
+.print-jobs h2 { margin-top: 0; }
+.print-job-list { list-style: none; padding: 0; }
+.print-job-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 12px 0; }
+.ticket-review { margin-top: 20px; }
+.ticket-preview { color: #000; background: #fff; border: 1px solid #ccc; padding: 16px; width: 42ch; max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; font-family: monospace; box-sizing: content-box; }
+.reprint-controls label { display: block; margin: 12px 0; }
+.reprint-controls textarea { display: block; width: 100%; min-height: 80px; }
+@media (max-width: 600px) { .print-jobs { padding: 20px; } .ticket-preview { box-sizing: border-box; } }
+
+.print-checkbox { display: flex !important; align-items: center; gap: 8px; margin: 12px 0; }
+.print-checkbox input { width: auto; }

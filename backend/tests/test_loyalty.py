@@ -203,7 +203,9 @@ class LoyaltyRepositoryTests(unittest.TestCase):
             query = [params for operation, params in self.db.calls if operation == 'query'][-1]
             stub.add_response('query', {'Items': []}, query)
             stub.add_response('transact_write_items', {}, write)
-            with patch('app.loyalty_repository.uuid4', return_value=write['ClientRequestToken']):
+            print_revision = next(adapter._decode(action['Put']['Item'])['revision'] for action in write['TransactItems']
+                                  if 'Put' in action and adapter._decode(action['Put']['Item']).get('item_type') == 'PRINT_JOB')
+            with patch('app.loyalty_repository.uuid4', return_value=write['ClientRequestToken']), patch('app.tickets.uuid4', return_value=print_revision):
                 saved = adapter.record_visit(result['visit'], rewards_for_visit)
             self.assertEqual(saved[2], 1)
             self.repo.ensure_qr_lock(self.customer)

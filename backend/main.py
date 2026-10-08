@@ -1,6 +1,10 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from app.print_routes import router as print_router
+from app.print_device_routes import router as device_router
+from app.print_service import PrintService
+from app.print_models import PrintJobNotFound, PrintJobConflict
 from app.raffle_routes import router as raffle_router
 from app.raffle import RaffleService
 from app.qr_routes import router as qr_router
@@ -35,11 +39,22 @@ def create_app(repository=None, token_verifier=None, media_storage=None):
     app.state.voucher_service = VoucherService(app.state.customer_service)
     app.state.qr_service = QRService(app.state.customer_service)
     app.state.raffle_service = RaffleService(app.state.customer_service)
+    app.state.print_service = PrintService(app.state.customer_service)
+    app.include_router(print_router)
+    app.include_router(device_router)
     app.include_router(raffle_router)
     app.include_router(qr_router)
     app.include_router(voucher_router)
     app.include_router(loyalty_router)
     app.include_router(media_router)
+
+    @app.exception_handler(PrintJobNotFound)
+    async def print_not_found(request, exc):
+        return JSONResponse(status_code=404, content={'detail': 'Print job not found.'}, headers={'Cache-Control': 'no-store'})
+
+    @app.exception_handler(PrintJobConflict)
+    async def print_conflict(request, exc):
+        return JSONResponse(status_code=409, content={'detail': str(exc) or 'Print job changed. Refresh before trying again.'}, headers={'Cache-Control': 'no-store'})
 
     @app.exception_handler(QRNotFound)
     async def qr_not_found(request, exc):

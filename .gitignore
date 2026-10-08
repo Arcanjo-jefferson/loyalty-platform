@@ -7,3 +7,7 @@ frontend/dist/
 .env.local
 .env.*.local
 .DS_Store
+
+print-agent/.venv/
+print-agent/state/
+print-agent/config.local.json

@@ -696,7 +696,7 @@ permissions, endpoints and manual acceptance procedure.
 - Automated tests use local fakes and SDK stubs, never the real AWS account
 
 See README for endpoints, explicit backfill commands and live acceptance steps.
-Milestone 5B below adds loyalty/birthday vouchers. QR generation is added in 5B.1 below. No printing,
+Milestone 5B below adds loyalty/birthday vouchers. QR generation is added in 5B.1 below. No physical printing,
 Epson integration or other later milestone has been implemented; 5C below adds digital raffle entries. Full customer edit audit logs remain
 future work; visits retain their authenticated recorder and server timestamp.
 
@@ -760,7 +760,7 @@ Public links are bearer credentials, not authenticated identity or automatic
 visit authorization. Downloaded old images remain visible but invalid for lookup
 after rotation. HTTPS, reference-log redaction and abuse controls belong in
 production hardening. Generic public branding avoids disclosing customer names.
-No Twilio, printing or Honeywell drivers are implemented. Milestone 5C below adds digital raffle entries. See README for
+No Twilio, physical printing or Honeywell drivers are implemented. Milestone 5C below adds digital raffle entries. See README for
 endpoints, setup and exact manual acceptance procedure.
 
 # Milestone 5C — IMPLEMENTED; LIVE ACCEPTANCE PENDING
@@ -798,13 +798,63 @@ resolves customer PII when preparing a job. Current history Query pagination is
 internal; the API returns retained history and the UI displays ten newest entries.
 Large-volume cursor pagination/retention/reporting remain future work. An ambiguous
 committed response can produce a daily-duplicate error on retry; refresh history
-for reconciliation. No printing, raffle draw, exports, print jobs or Twilio added.
+for reconciliation. Milestone 5C adds no printing, raffle draw, exports, print jobs or Twilio; 5D.1 below adds the durable digital queue.
 See README for setup and exact manual acceptance steps. No migration is required.
+
+# Milestone 5D.1 — IMPLEMENTED; LIVE QUEUE ACCEPTANCE PENDING
+
+- Each new valid visit atomically creates raffle ticket job plus jobs for actual
+  issued loyalty/birthday vouchers: one, two or three separate jobs
+- Canonical tenant PRINT#<customer UUID>.<visit UUID>.<ticket type> records,
+  item_type PRINT_JOB; deterministic source/type identity and conditional insertion
+- Queries for business, customer, customer/visit prefixes; no Scan/GSI/new AWS resources
+- Initial jobs join counter/visit/raffle/date/voucher/reward/code transaction
+- Five/nine/thirteen actions for zero/one/two rewards; adapter enforces conservative
+  100-action/4 MB transaction and 400 KiB put limits before dispatch
+- Customer revision check preserves immutable snapshot/reward consistency
+- Template version 1 stores 42-column monochrome receipt text and original
+  business/name/phone/source/existing code/issue/expiry/Dublin time/signature data
+- No IDs/consent images, DOB, addresses, QR secrets or unrelated PII in snapshots
+- Trumps label for existing trumps business; generic Contactly elsewhere pending settings
+- PENDING/CLAIMED/PRINTING/COMPLETED/RETRYABLE/FAILED/UNCERTAIN lifecycle
+- Random claim fence, verified subject and 120-second expiry; revision CAS transitions
+- Start/complete/fail require the same holder/current token/unexpired lease
+- Expired/prestart failure retries limited to three; started failure/expired output
+  is UNCERTAIN and never automatically reclaimed or endlessly reprinted
+- Effective expiry on reads; explicit review persists expiry with CAS
+- Explicit Owner/Manager confirmed reprint with reason/request UUID; original audit
+  and child commit together, preserve original code/details, mark REPRINT
+- Idempotent request UUID; further reprints reference original, never reprint children
+- Staff has scoped customer/visit summary status only; no global queue/ticket/admin
+- Owner/Manager queue/review/detail/lifecycle/reprint APIs remain Cognito/tenant protected
+- Claim token returned only on claim, never queue/detail summaries; safe error codes
+- UI displays Queued after visits and in profile; manager queue previews/reprint review
+- Memory mirror for tests/offline use, DynamoDB for durability; no new configuration
+- No historical automatic jobs/backfill; no physical or browser printing implemented
+- AWS-independent transaction/count/rollback/concurrency/snapshot/lease/role/UI tests
+
+Snapshots deliberately retain original customer PII after edits; production
+retention/erasure must include print records/audit reasons. Current global queue
+reads retained PRINT# range and filters review state; customer UI shows ten recent
+jobs. Public pagination/status work discovery are later scaling decisions.
+Printed status means authenticated completion acknowledgement, not hardware proof.
+No UI can fabricate that state. A lost reply requires queue reconciliation before
+another explicit reprint; uncertain paper outcomes cannot be solved by auto-retry.
+
+5D.2A below implements the isolated development Windows agent/EPSON transport.
+Production deployment still requires encoding/paper/cut/status acceptance,
+onsite spool/ack acceptance. Lease renewal is implemented in 5D.2A. It must use a
+separate revocable device identity, verified business/device binding and narrow
+queue scopes, not an embedded credential, staff login or auth bypass. Existing
+human Owner/Manager lifecycle routes are not a production agent identity. No
+issuer/device credentials/resources are invented in 5D.1. The agent must receive
+start acknowledgement before hardware output and preserve uncertain-outcome
+operator review. See README for complete endpoints, lifecycle and acceptance.
 
 # Future Milestones
 
-## Milestone 5D
-Receipt printing and Windows/Epson print agent
+## Milestone 5D.2
+Physical receipt printing and Windows/Epson print agent
 
 ## Milestone 7
 Twilio messaging and birthday automation
@@ -837,3 +887,20 @@ Before modifying the repository:
 If an implementation request conflicts with this document, do not silently
 redesign the system. Report the conflict before making a major architectural
 change.
+# Milestone 5D.2A — IMPLEMENTED LOCALLY; DEVICE DEPLOYMENT/ONSITE ACCEPTANCE PENDING
+
+- Separate outbound Python Windows worker; simulation defaults to local fixtures,
+  no HTTP, claims or Windows printer access
+- Explicit Windows queue RAW adapter, immutable 42-column PC858 text and independent
+  partial-cut requests; compatibility/physical output not tested
+- Durable SQLite intent fence before start, atomic backend claims and safe renewal;
+  uncertain output never automatically retried
+- Spool acceptance maps to UNCERTAIN with safe diagnostic code and no printed_at;
+  physical paper completion is not asserted
+- Dedicated development device transport, disabled by default, loopback and exact
+  in-memory repository only; business/device bound by backend configuration
+- Production transport blocked pending revocable device identity provisioning,
+  enrollment, vault storage and TLS; no AWS resources or credentials created
+- No Owner/Manager credentials on agent, no new visits/rewards or public QR auth
+- Task Scheduler instructions only; no startup task, printer or driver changes
+- See print-agent/README.md for configuration, limits and onsite acceptance

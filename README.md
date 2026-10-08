@@ -2,7 +2,7 @@
 
 A local MVP for a future multi-business customer loyalty and SMS marketing platform. The project is designed to give managers a customer directory and, tools for recording visits and, in later milestones, issuing rewards and communicating with customers who have opted into marketing.
 
-**Current status: Milestones 1–3 completed and manually verified against AWS by the project owner; Milestone 4 profile-photo storage/retrieval manually verified; Milestone 5A complete; Milestone 5B voucher engine implemented; Milestone 5B.1 QR management implemented; Milestone 5C Daily Raffle implemented, awaiting live acceptance.** The application runs locally with a React manager dashboard and a FastAPI customer API. Customer persistence is configurable between DynamoDB and an optional in-memory repository. Cognito business-user login and server-side role/tenant authorization are implemented. Private customer images, camera capture and ID verification are implemented. QR lookup, explicit visit confirmation and loyalty progress are implemented. Automatic €10 loyalty/€20 birthday vouchers, redemption and atomic Daily Raffle entries are implemented; SMS sending remains planned. DynamoDB persistence was manually verified by the project owner.
+**Current status: Milestones 1–3 completed and manually verified against AWS by the project owner; Milestone 4 profile-photo storage/retrieval manually verified; Milestone 5A complete; Milestone 5B voucher engine implemented; Milestone 5B.1 QR management implemented; Milestone 5C Daily Raffle implemented; Milestone 5D.1 durable print queue and ticket generation implemented, awaiting live acceptance; Milestone 5D.2A Windows development agent implemented, awaiting production device provisioning and onsite printer acceptance.** The application runs locally with a React manager dashboard and a FastAPI customer API. Customer persistence is configurable between DynamoDB and an optional in-memory repository. Cognito business-user login and server-side role/tenant authorization are implemented. Private customer images, camera capture and ID verification are implemented. QR lookup, explicit visit confirmation and loyalty progress are implemented. Automatic €10 loyalty/€20 birthday vouchers, redemption and atomic Daily Raffle entries are implemented; SMS sending remains planned. DynamoDB persistence was manually verified by the project owner.
 
 ## Implemented features
 
@@ -13,7 +13,7 @@ A local MVP for a future multi-business customer loyalty and SMS marketing platf
 - Irish mobile input with a visible Ireland `+353` indicator. National and international formats are normalized to E.164 by the backend before storage and per-business duplicate checks. Incomplete or malformed numbers are rejected. Validation checks format, not phone ownership or service availability.
 - Minimum age of 18 enforced in frontend and backend using the full birth date and the current date in `Europe/Dublin`. Invalid and future dates are rejected. February 29 birthdays reach the age threshold on March 1 in non-leap years.
 - Explicit promotional/marketing SMS consent, with a UTC timestamp for the most recent consent transition.
-- Secure UUID4 customer IDs and separate random, opaque `qr_token` values containing no personal data. Keyboard scanner lookup and confirmed visit tracking are implemented; QR rendering, customer-facing links and protected regeneration are implemented; printing remains planned.
+- Secure UUID4 customer IDs and separate random, opaque `qr_token` values containing no personal data. Keyboard scanner lookup and confirmed visit tracking are implemented; QR rendering, customer-facing links and protected regeneration are implemented; digital print queuing/ticket generation is implemented; Windows development printing adapter is implemented; production printing and onsite acceptance remain pending.
 - Server-managed UTC creation/update timestamps and active/inactive customer status.
 - Successful registration and updates automatically open the customer's profile using the saved API response immediately. Reusable accessible notifications display `Customer registered successfully.` or `Customer details updated successfully.`
 - Failed submissions remain on the form, preserve entered values and show an error without success feedback.
@@ -348,11 +348,11 @@ Live Cognito acceptance has not been performed by the automated tests; no real u
 
 Milestone 2 persistence has been manually verified by the project owner. Milestone 3 Cognito integration and current customer authorization are manually verified. Milestone 4 profile-photo storage/retrieval is manually verified. Milestone 5A QR lookup and visit tracking is complete. Milestone 5B automatic vouchers, Milestone 5B.1 customer QR management and Milestone 5C Daily Raffle entries are implemented; live acceptance of the new raffle workflow is pending. The following later milestones are **not implemented**, following `PROJECT_CONTEXT.md`:
 
-- **Milestone 5D:** receipt printing and Windows/Epson print agent.
+- **Milestone 5D.2:** Windows Print Agent, printer transport and physical Epson printing.
 - **Milestone 7:** Twilio messaging, consent-aware campaigns and scheduled birthday promotions.
 - **Milestone 8:** audit/security/privacy hardening and production deployment, including future Lambda/API Gateway and hosting infrastructure.
 
-Exact boundaries may evolve. No raffle winner selection, printing, Twilio, scheduled birthday SMS automation or Lambda deployment is included in the current implementation.
+Exact boundaries may evolve. No raffle winner selection, physical printing, Twilio, scheduled birthday SMS automation or Lambda deployment is included in the current implementation.
 
 ### Retrying a temporary-password sign-in
 
@@ -747,7 +747,7 @@ All records retain `business_id` as the partition key in the existing table.
 Visit registration reads the persisted customer/counter and strongly consistent
 history, evaluates reward policy, and commits a **single DynamoDB transaction**:
 conditional customer counter update, visit insert, plus voucher/reward-lock/code-lock
-inserts (maximum eight actions for two rewards). All inserts require absence.
+inserts (5D.1 now adds raffle/date rows and print jobs, maximum thirteen actions for two rewards). All inserts require absence.
 The customer update checks active status, expected lifetime count and expected
 `updated_at`, so concurrent DOB edits cause policy re-evaluation. Reward locks
 remain after redemption/expiry. Customer responses exclude every internal type.
@@ -837,8 +837,9 @@ Effective EXPIRED is computed rather than persisted. Expiry is evaluated against
 the server request timestamp; keep server clocks synchronized. Transactions
 received just before midnight are judged at that trusted timestamp.
 
-**Milestone 5D receipt/Windows/Epson printing remains deferred.** There is no
-`window.print()`, print agent, raffle draw, Twilio message, scheduled birthday automation or AWS deployment added.
+**Production Windows/Epson printing remains blocked pending device provisioning and onsite acceptance.**
+5D.2A adds the isolated development agent below. No browser printing, raffle draw,
+Twilio message, scheduled birthday automation or AWS deployment is added.
 
 
 ### Development-only four-visit acceptance seed
@@ -981,8 +982,8 @@ Customer name/phone can be resolved later when preparing a print job.
 
 One conditional transaction commits the customer counter update, VISIT row,
 RAFFLE_ENTRY row, date projection and any voucher/reward/code-lock rows. Both
-raffle puts require absent keys. A normal visit uses four actions; a fifth visit
-uses seven; a combined loyalty/birthday reward uses ten. Existing active status,
+raffle puts require absent keys. With 5D.1 print jobs, a normal visit uses five actions; a fifth visit
+uses nine; a combined loyalty/birthday reward uses thirteen. Existing active status,
 optimistic counter/revision, daily history and reward/code conditions remain.
 Any failed condition/write rolls back the entire transaction. In-memory mode
 mirrors the operation under its existing lock. Retries may return the existing
@@ -1028,8 +1029,8 @@ entries, not the entire table. The current history endpoint follows DynamoDB
 pagination internally but returns all entries; the UI shows ten. Public cursor
 pagination/retention and large-volume reporting are future work. Existing
 customer list Queries still consume reads for filtered internal business rows.
-No winner selection, exports, ticket printing, print jobs/agent, browser printing,
-Twilio, or new public data access is implemented. Server clocks must remain
+Milestone 5D.1 below adds the digital queue and immutable tickets. No winner
+selection, exports, production printing, browser printing, Twilio or new public data access is implemented; the isolated 5D.2A agent is described below. Server clocks must remain
 synchronized. Future business-specific timezone settings remain deferred.
 
 ### Exact live acceptance procedure
@@ -1109,3 +1110,197 @@ the existing duplicate error. Clear/change selection and verify QR lookup still
 works. Repeat with Owner, Manager and Staff; separate-business users must not
 see/select the original customer. No migration, configuration or AWS changes
 are needed; reload Vite for this frontend improvement.
+
+
+## Milestone 5D.1: Durable print queue and immutable tickets
+
+New confirmed visits automatically queue one Daily Raffle ticket, plus one ticket
+for each €10 loyalty / €20 birthday voucher actually issued by the existing reward
+engine. There can be one, two or three jobs. Print creation never issues a reward
+or changes eligibility. QR/manual lookup, selection, rejected/duplicate visits,
+redemption and QR regeneration do not create jobs. Production physical printing is
+blocked; 5D.2A adds a separate development adapter below.
+
+### Single-table keys and atomic creation
+
+The existing PK `business_id` is always verified from Cognito. The canonical SK is:
+
+```text
+PRINT#<customer UUID>.<source visit UUID>.<DAILY_RAFFLE|LOYALTY_10|BIRTHDAY_20>
+```
+
+`print_job_id` is the portion after PRINT#. This deterministic source/type identity
+is unique within the tenant and is conditionally inserted. Reprints append
+`.R<client request UUID>` to the original ID. These are authenticated internal
+identifiers; they are never public links. Owner customer is stored separately as
+`owner_customer_id`, and `item_type=PRINT_JOB`. Jobs contain source visit, raffle
+entry or voucher ID, timestamps, lifecycle/audit fields and a versioned snapshot.
+
+Business queue, customer queue and customer/visit retrieval use paginated,
+strongly consistent Queries with prefixes `PRINT#`, `PRINT#<customer UUID>.` and
+`PRINT#<customer UUID>.<visit UUID>.`. There is no Scan, GSI, mutable queue index,
+new table or automatic AWS/IAM resource change. Customer APIs exclude print rows.
+
+Initial job puts join the existing authoritative visit transaction: counter,
+VISIT, raffle entry/date projection, any vouchers/reward/code locks and all jobs.
+Normal visits use five actions; one reward uses nine; both rewards use thirteen.
+Customer revision is checked so concurrent edits cannot mix snapshot details with
+an outdated reward decision. Job-generation or write failure leaves no partial
+visit/reward/raffle/jobs. Memory mode mirrors atomic creation under the existing
+lock but remains process-local; only DynamoDB mode is durable.
+
+The adapter checks the 100-action and 4 MB aggregate limits before dispatch,
+using a conservative serialized-size bound and reserving up to 400 KiB for each
+existing update/check item. Put sizes are also bounded below 400 KiB. Maximum
+current action count is thirteen, and snapshot text is capped at 8,000 characters.
+See [AWS transaction limits](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_TransactWriteItems.html).
+
+### Tickets and immutable PII
+
+Template version 1 is a 42-column black-and-white, Unicode receipt-text snapshot.
+It includes business name (Trumps for the existing trumps business, otherwise
+generic Contactly until business settings exist), original customer name/phone,
+required ticket message/heading, source reference or existing voucher code,
+Europe/Dublin issue/expiry time and signature line. Expiry is exclusive, matching
+the existing backend rules. No code is regenerated, including on reprint.
+
+The complete bounded text and structured snapshot are stored when the visit
+commits. Edits to customer details never rewrite historical tickets. Reprints use
+that original snapshot with an explicit REPRINT banner. Control characters,
+including printer-command escape characters, are stripped; previews render as
+escaped text, never injected HTML. No ID/consent images, DOB, address, QR secret
+or unrelated PII is copied. Print snapshots are private customer PII: production
+retention/erasure policy must include these records and audit reasons.
+
+### Lifecycle and paper-duplication safety
+
+| State | Meaning / allowed next action |
+| --- | --- |
+| PENDING | Queued; may be atomically claimed |
+| CLAIMED | Fenced 120-second lease; output has not started |
+| PRINTING | Start accepted; outcome may include physical output |
+| COMPLETED | Current holder acknowledged completion; UI says Printed |
+| RETRYABLE | Failed/expired before start; may be claimed within attempt limit |
+| FAILED | Three pre-output attempts exhausted; requires explicit reprint |
+| UNCERTAIN | Started failure/expired printing; operator review/explicit reprint only |
+
+Claim uses a random token, trusted subject, expiry and revision CAS; concurrent
+claimers cannot both win. Start, complete and fail require both the current token
+and matching authenticated holder with an unexpired lease. Only the claim response
+returns the token. Lists/details/status responses never expose it. Every durable
+transition records actor/time and a safe action/error code. Raw printer exception
+text, JWTs, passwords or device credentials are not logged/stored by this feature.
+
+A future agent MUST receive a successful start response before sending any bytes
+to hardware. Expired CLAIMED jobs can safely retry because this protocol forbids
+output before start. Expired/failed PRINTING jobs become effectively UNCERTAIN
+and cannot be claimed automatically, even if acknowledgement was lost. GETs
+calculate effective expired status without writes; operator review persists it
+with CAS. The fixed lease is not renewed in 5D.1. Server clocks must be accurate.
+Acknowledged completion is a trusted caller statement, not hardware verification.
+
+Explicit reprints are allowed only for original COMPLETED, FAILED or UNCERTAIN
+jobs, with confirmation and a meaningful audit reason. A deterministic request UUID
+makes repeats of the same request idempotent. The original audit update and child
+job insertion are one transaction. A child has its own attempt budget, original
+source/codes/snapshot and REPRINT label. Reprint children cannot be recursively
+reprinted: further explicit requests must reference the original. Nothing queues
+additional paper automatically after uncertain output. After a lost response,
+refresh/inspect the queue before another explicit decision. Do not change the
+request UUID when retrying the same request.
+
+### APIs and role boundaries
+
+All routes verify the existing Cognito ID token and derive business exclusively
+from it; mismatched business query parameters are rejected.
+
+| Endpoint | Permission / purpose |
+| --- | --- |
+| `GET /customers/{id}/print-jobs` | Owner/Manager/Staff; summary status only |
+| `GET /customers/{id}/visits/{visit_id}/print-jobs` | Owner/Manager/Staff; scoped summaries |
+| `GET /print-jobs` | Owner/Manager business queue; `?review=true` filters failed/uncertain/retryable |
+| `GET /print-jobs/{job_id}` | Owner/Manager; immutable ticket and audit detail, no claim token |
+| `POST /print-jobs/{job_id}/claim` | Owner/Manager; `{}`; atomically lease job |
+| `POST /print-jobs/{job_id}/start` | Owner/Manager; current `claim_token` |
+| `POST /print-jobs/{job_id}/complete` | Owner/Manager; current `claim_token` |
+| `POST /print-jobs/{job_id}/fail` | Owner/Manager; current `claim_token`; safe failure classification |
+| `POST /print-jobs/{job_id}/review` | Owner/Manager; `{}`; persist expired lease classification |
+| `POST /print-jobs/{job_id}/reprint` | Owner/Manager; UUID `request_id`, `reason`, `confirmed: true` |
+
+Staff cannot administer the global queue, see ticket snapshots/audit reasons or
+invoke lifecycle/reprint operations. Backend guards enforce this independently of
+React. No unauthenticated queue/ticket route or generic create-print-job endpoint
+exists. Visit responses contain queued summaries only; clients cannot choose jobs.
+
+Contactly shows Queued ticket statuses after successful confirmation. Customer
+profiles show the ten most recent job summaries with refresh. Owner/Manager have
+**Print queue**, review filtering, private snapshot preview and an explicit reason
+and confirmation for reprints. There are no UI controls that fabricate completion,
+send bytes to hardware or call `window.print()`.
+
+### Setup and live acceptance
+
+No new dependency, environment variable, migration, startup backfill or AWS
+resource change is needed. Use existing DynamoDB/Cognito configuration. Restart
+FastAPI, reload Vite. Jobs begin with new visits after deployment; old rewards and
+visits do not automatically gain jobs. The four-historical-visit development seed
+still creates no jobs; the next normal fifth visit creates its two/three jobs.
+
+1. With a fictional active customer eligible for a visit today, use either QR or
+   name/phone identification. Lookup/selection must leave all job/history counts
+   unchanged. Confirm once; see raffle job Queued, never Printed.
+2. Open the profile and Owner/Manager Print queue. Inspect the immutable receipt;
+   check name/phone, heading/message, signature, source reference and Dublin time.
+3. With an eligible fictional customer at four historical visits, confirm: raffle
+   plus loyalty jobs must use the issued voucher's existing code/expiry. Birthday
+   eligibility adds the birthday ticket; both rewards produce exactly three jobs.
+4. Retry the same day or use two tabs: no duplicate jobs/visit/rewards. Query the
+   existing table using business partition and PRINT# customer/visit prefix to
+   verify one canonical record per source/type. Never use a table Scan.
+5. Change a fictional customer's name/phone and re-open the old ticket: original
+   snapshot remains. Staff sees status summaries; global queue/detail/reprint APIs
+   must return 403. Separate-business users cannot read these jobs (404 or empty
+   own queue). Logged-out calls return 401.
+6. All newly queued jobs remain pending in 5D.1 because no print agent is connected.
+   Exercise claim/start/ack/failure/reprint through automated local tests. Do not
+   mark live jobs completed just to simulate printing; no paper has been produced.
+   Uncertain/reprint UI acceptance can use isolated test fixtures, not false live
+   acknowledgements or DynamoDB edits.
+
+### Milestone 5D.2 boundary and remaining decisions
+
+The intended flow remains backend queue → Contactly Windows Print Agent → EPSON
+TM-m30III → automatic cut. 5D.1 contains no executable agent, USB/network transport,
+ESC/POS encoding, physical printing, spooler or driver integration. Unicode Euro
+encoding/raster fallback, paper width/font, cutting, hardware status and offline
+reconciliation must be tested on the actual Windows printer in 5D.2.
+
+Current lifecycle endpoints are authenticated HUMAN Owner/Manager administration
+boundaries, not a provisioned production device credential. The Windows agent
+must receive its own revocable identity with explicit business/device binding and
+narrow claim/start/ack scopes, enforced in a dedicated backend authorization guard.
+Choose the real issuer/audience and enrollment/rotation mechanism in 5D.2; do not
+reuse a staff login, embed credentials, add an auth bypass or accept a business ID
+from the agent. Only that authenticated device plus its current fence may act as
+holder. Existing Cognito verification must remain intact.
+
+Exactly-once physical output cannot be guaranteed over printer/network crashes.
+The lease/start protocol deliberately pauses ambiguous outcomes for operators.
+5D.2A preserves that policy with lease renewal and a durable local output fence.
+Production device deployment and onsite spool/ack acceptance remain pending.
+Queue queries currently paginate internally but return retained jobs; global review
+filters read the business's PRINT# range rather than a status index. For larger
+volumes, add public cursor pagination/status work discovery after an explicit
+architecture review; no expensive Scan or AWS index is silently introduced here.
+Retention, device audit policy, rate limits and secure Windows credential storage
+remain production work. No Twilio, raffle draw or new voucher rule is implemented.
+
+### Milestone 5D.2A — Windows agent implementation
+
+`print-agent/` contains an outbound worker, local-only default simulation,
+Windows RAW Epson adapter, durable restart fence and mocked tests. See
+[Windows setup and onsite acceptance](print-agent/README.md). No physical printing
+was attempted. Spool acceptance records UNCERTAIN rather than claiming paper output.
+An isolated, disabled-by-default loopback/in-memory device transport is implemented;
+production device enrollment/authentication remains a deployment blocker. The worker
+cannot consume live DynamoDB jobs and never uses Owner/Manager credentials.

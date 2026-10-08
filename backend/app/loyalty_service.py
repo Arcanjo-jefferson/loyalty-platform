@@ -2,6 +2,7 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 from .models import Visit
+from .print_service import job_view
 from .voucher_rules import rewards_for_visit
 from .repository import InactiveCustomer
 from .service import CustomerNotFound
@@ -30,8 +31,8 @@ class LoyaltyService:
         if customer.status != 'active': raise InactiveCustomer()
         visit = Visit(business_id=user.business_id, visit_id=str(uuid4()), customer_id=customer_id,
                       visited_at=self.clock(), recorded_by=user.subject)
-        saved_customer, saved_visit, count, vouchers, raffle_entry = self.repository.record_visit(visit, rewards_for_visit)
-        return {'customer': saved_customer, 'visit': saved_visit, 'vouchers': vouchers, 'raffle_entry': raffle_entry, **loyalty_progress(count)}
+        saved_customer, saved_visit, count, vouchers, raffle_entry, jobs = self.repository.record_visit(visit, rewards_for_visit)
+        return {'customer': saved_customer, 'visit': saved_visit, 'vouchers': vouchers, 'raffle_entry': raffle_entry, 'print_jobs': [job_view(job, saved_visit.visited_at) for job in jobs], **loyalty_progress(count)}
 
     def history(self, business_id, customer_id):
         customer = self.customers.get(business_id, customer_id)

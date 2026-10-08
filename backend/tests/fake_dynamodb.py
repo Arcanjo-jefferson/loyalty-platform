@@ -57,6 +57,8 @@ class FakeDynamoDB:
             return item is None
         if expression == '#owner = :owner AND #business = :business':
             return item is not None and item.get('owner_customer_id') == values[':owner'] and item.get('owner_business_id') == values[':business']
+        if expression == '#kind = :kind AND #revision = :revision':
+            return item is not None and item.get('item_type') == values[':kind'] and item.get('revision') == values[':revision']
         prefix_qr = '#type = :type AND #qr = :old AND #updated = :expected AND '
         if expression.startswith(prefix_qr):
             return item is not None and item.get('item_type') == values[':type'] and item.get('qr_token') == values[':old'] and item.get('updated_at') == values[':expected'] and (item.get('public_qr_ref') == values[':old_ref'] if ':old_ref' in values else 'public_qr_ref' not in item)
