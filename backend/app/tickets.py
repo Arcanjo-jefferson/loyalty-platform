@@ -28,11 +28,14 @@ def ticket_snapshot(customer, visit, entry, voucher=None):
     lines = [business, 'BIRTHDAY VOUCHER' if kind == 'BIRTHDAY_20' else 'LOYALTY BONUS', '', name, customer.phone, '']
     if voucher:
         lines += ['€10 Loyalty Voucher' if kind == 'LOYALTY_10' else '€20 Birthday Voucher',
-                  'Voucher code:', voucher.voucher_code, 'Issued: ' + local_time(issued),
+                  'Voucher code:', voucher.voucher_code,
                   'Valid until (exclusive): ' + local_time(voucher.expires_at)]
     else:
         lines += ['You have just entered our Daily Raffle!', 'Please sign and place in Raffle Drum.', 'GOOD LUCK!',
-                  'Visit/raffle: ' + reference, 'Date/time: ' + local_time(issued)]
+                  'Visit/raffle: ' + reference]
+    issued_local = issued.astimezone(ZoneInfo('Europe/Dublin'))
+    lines += ['', 'Issued date: ' + issued_local.strftime('%d/%m/%Y'),
+              'Issued time: ' + issued_local.strftime('%H:%M')]
     lines += ['', 'Customer signature:', '_______________________________', '', 'Europe/Dublin']
     receipt = '\n'.join('\n'.join(textwrap.wrap(line, width=42)) if line else '' for line in lines)
     return TicketSnapshot(business_name=business, customer_name=name, phone=customer.phone, ticket_type=kind,

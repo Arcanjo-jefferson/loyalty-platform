@@ -3,7 +3,7 @@ import { signIn, confirmSignIn } from 'aws-amplify/auth'
 import { createSignInFlow } from '../signInFlow'
 import { AuthContext } from '../AuthContext'
 import { apiRequest } from '../api'
-import { authConfigured, endSession, getIdToken } from '../authSession'
+import { authConfigured, endSession, getIdToken, getDisplayIdentity } from '../authSession'
 
 export default function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
@@ -14,7 +14,7 @@ export default function AuthProvider({ children }) {
     const restore = async () => {
       try {
         await getIdToken()
-        const identity = await apiRequest('/auth/me')
+        const identity = await getDisplayIdentity(await apiRequest('/auth/me'))
         if (active) setUser(identity)
       } catch { /* No authenticated UI is mounted without a verified backend identity. */ }
       finally { if (active) setLoading(false) }
@@ -25,7 +25,7 @@ export default function AuthProvider({ children }) {
     return () => { active = false; window.removeEventListener('auth:expired', expire) }
   }, [])
   async function acceptSession() {
-    try { const identity = await apiRequest('/auth/me'); setUser(identity); setSessionMessage('') }
+    try { const identity = await getDisplayIdentity(await apiRequest('/auth/me')); setUser(identity); setSessionMessage('') }
     catch (error) { await endSession().catch(() => {}); throw error }
   }
   const [flow] = useState(() => createSignInFlow({ signIn, confirmSignIn, acceptSession, endSession }))

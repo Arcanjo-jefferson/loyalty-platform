@@ -226,7 +226,8 @@ values cannot change scope. Claim owner is `device:UUID`, stable across rotation
 Owner-only human routes: GET/POST `/print-devices`, POST `/print-devices/{id}/disable`
 and `/rotate` (empty JSON). Managers/Staff cannot manage devices. Existing human
 print administration remains separate, authenticated with Cognito ID tokens.
-No device management frontend is supplied yet; these API capabilities are prepared.
+The Owner-only Print devices screen (`#/print-devices`) exposes list/register and
+confirmed disable/rotation through these existing APIs.
 Responses contain metadata/events/last_seen/client ID, never secrets.
 
 Disable immediately blocks subsequent authorization, including already-issued
@@ -271,3 +272,25 @@ acceptance additionally requires verified provisioning, real TLS/token acquisiti
 Owner registration/disable/rotation, tenant isolation and expired-token handling
 before any approved Epson test. Spool acceptance still reports UNCERTAIN, never
 physical completion. Do not install startup tasks before acceptance.
+
+### Original ticket issuance date/time
+
+New template version 3 snapshots store the server-issued UTC `issued_at` and render
+`Issued date: DD/MM/YYYY` plus `Issued time: HH:mm` (hours and actual minutes),
+converted to Europe/Dublin with DST. All raffle/€10/€20 tickets use the same labels.
+The agent validates those lines and prints the immutable text unchanged; it never
+substitutes its current time. Explicit reprints retain the same timestamp/text with
+REPRINT above it. Existing version 1 snapshots keep their original date/time format.
+No historical data migration is needed. Layout remains 42 columns.
+
+Windows requires the `tzdata` dependency for IANA timezone support; install the
+updated requirements before validating version 3 tickets. See
+[Python zoneinfo guidance](https://docs.python.org/3/library/zoneinfo.html).
+
+Existing simulated files are deliberately not overwritten. To inspect updated
+fixtures, use a fresh simulation output directory (change `state_directory` in a
+local simulation config), then run the usual simulation command. No printer or
+real backend is involved.
+
+Ticket time correction: new version 3 snapshots include actual original minutes (HH:mm).
+Existing immutable version 1/2 snapshots remain supported without rewriting history.

@@ -1334,6 +1334,17 @@ throttling remain deployment/scaling work.
 
 Owner API: GET/POST `/print-devices`; POST `/print-devices/{id}/disable|rotate`.
 Machine API: GET `/print-agent/jobs`; POST `/print-agent/jobs/{id}/claim|start|renew|fail|submitted`.
-No agent review/reprint/complete route. Owner management UI remains unimplemented;
-the API/pending-provisioning workflow is available. Provider creation, secret delivery
+No agent review/reprint/complete route. Owner-only Print devices UI is available at `#/print-devices`: list/register,
+view returned device ID/status/last-seen, and explicitly confirm disable/rotation.
+The existing API remains the authoritative role and tenant boundary. Provider creation, secret delivery
 and provider revocation are explicit operator steps, never automatically performed.
+
+New ticket template version 3 shows original issuance date (`DD/MM/YYYY`) and hour
+(`HH:mm`, actual minutes) in Europe/Dublin on raffle, €10 and €20 tickets. Snapshots retain
+server-issued UTC timestamps; retries/reprints never use processing time. Reprints
+remain marked REPRINT. Legacy immutable snapshots retain their existing formatting;
+no migration or physical printing is required. Updated simulation fixtures and
+Windows timezone dependency are described in the Print Agent README.
+
+Ticket time correction: new version 3 snapshots include actual original minutes (HH:mm).
+Existing immutable version 1/2 snapshots remain supported without rewriting history.

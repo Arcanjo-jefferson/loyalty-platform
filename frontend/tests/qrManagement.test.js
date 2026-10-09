@@ -25,7 +25,7 @@ test('public link is opaque and contains no business, customer UUID or PII', () 
 })
 test('public render contains only generic branding, QR and instructions', () => {
   const html = renderToStaticMarkup(createElement(PublicQRView, { imageUrl: `https://api.example/public/qr/${reference}/image`, loaded: true, failed: false }))
-  assert.match(html, /Contactly/); assert.match(html, /loyalty-qr-image/)
+  assert.match(html, /Loyalty System/); assert.match(html, /loyalty-qr-image/)
   assert.doesNotMatch(html, /first_name|date_of_birth|voucher|visit_id|customer_id|phone|address/)
   const unavailable = renderToStaticMarkup(createElement(PublicQRView, { failed: true }))
   assert.match(unavailable, /unavailable/); assert.doesNotMatch(unavailable, /<img/)

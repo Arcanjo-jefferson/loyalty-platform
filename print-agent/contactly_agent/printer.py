@@ -2,12 +2,13 @@
 from pathlib import Path
 import hashlib
 import os
+from .formatting import receipt_text
 
 class SimulationPrinter:
     def __init__(self, directory):
         self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
-    def prepare(self, job): return job['ticket']['receipt_text'].encode('utf-8')
+    def prepare(self, job): return receipt_text(job).encode('utf-8')
     def submit(self, job, payload):
         name = hashlib.sha256(job['print_job_id'].encode()).hexdigest() + '.txt'
         target = self.directory / name
@@ -24,7 +25,7 @@ class WindowsPrinter:
             api = win32print
         self.name, self.api = name, api
     def prepare(self, job):
-        text = job['ticket']['receipt_text']
+        text = receipt_text(job)
         columns = job['ticket']['receipt_columns']
         if columns != 42 or any(len(line) > columns for line in text.splitlines()):
             raise ValueError('Unsupported receipt width; immutable content cannot be truncated.')

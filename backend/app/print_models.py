@@ -13,7 +13,7 @@ class PrintJobConflict(Exception): pass
 
 class TicketSnapshot(BaseModel):
     model_config = ConfigDict(frozen=True, extra='forbid')
-    template_version: Literal[1] = 1
+    template_version: Literal[1, 2, 3] = 3
     business_name: str = Field(max_length=100)
     customer_name: str = Field(max_length=201)
     phone: str = Field(max_length=32)

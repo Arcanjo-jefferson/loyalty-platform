@@ -8,7 +8,7 @@ import PrintJobStatuses from '../src/components/PrintJobStatuses.js'
 import { createVisitFlow } from '../src/visitFlow.js'
 
 const job = { print_job_id: 'fixture.print.DAILY_RAFFLE', customer_id: 'fixture', source_visit_id: 'print', ticket_type: 'DAILY_RAFFLE', status: 'PENDING', display_status: 'Queued' }
-const ticket = { receipt_text: 'Trumps\nLOYALTY BONUS\nFictional Customer\n+353831234567' }
+const ticket = { template_version: 3, issued_at: '2026-10-08T12:45:00Z', receipt_text: 'Trumps\nLOYALTY BONUS\nFictional Customer\n+353831234567\nIssued date: 08/10/2026\nIssued time: 13:45\nEurope/Dublin' }
 const detail = { ...job, status: 'UNCERTAIN', ticket }
 
 test('new visit jobs show Queued for raffle and vouchers, never Printed', async () => {
@@ -93,4 +93,18 @@ test('actual attention checkbox keeps review filter and uses the requested frien
   assert.ok(source.includes('Show only jobs that need attention'))
   assert.ok(source.includes('flow.load(customerId, reviewOnly)'))
   assert.ok(!source.includes('Failed, uncertain or retryable jobs only'))
+})
+
+
+test('ticket preview retains original issuance display through review and explicit reprint', async () => {
+  const flow = createPrintFlow({ newId: () => 'request', request: async (path, options) => options.method
+    ? { ...detail, print_job_id: 'reprint', reprint_of: job.print_job_id, ticket: { ...ticket, receipt_text: 'REPRINT\n' + ticket.receipt_text } }
+    : detail })
+  await flow.inspect(job.print_job_id)
+  assert.equal(flow.getSnapshot().detail.ticket.issued_at, ticket.issued_at)
+  assert.match(flow.getSnapshot().detail.ticket.receipt_text, /Issued date: 08\/10\/2026\nIssued time: 13:45/)
+  await flow.reprint(job.print_job_id, 'Paper damaged', true)
+  const snapshot = flow.getSnapshot().jobs[0].ticket
+  assert.equal(snapshot.issued_at, ticket.issued_at)
+  assert.equal(snapshot.receipt_text, 'REPRINT\n' + ticket.receipt_text)
 })

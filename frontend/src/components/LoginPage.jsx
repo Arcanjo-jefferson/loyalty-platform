@@ -3,6 +3,8 @@ import { useAuth } from '../AuthContext'
 import { authConfigured } from '../authSession'
 import { signInErrorMessage } from '../signInFlow'
 import Notification from './Notification'
+import BrandIdentity from './BrandIdentity.js'
+import { defaultBranding } from '../branding'
 
 export default function LoginPage() {
   const { login, completePassword, sessionMessage, signInStep, cancelSignIn } = useAuth()
@@ -22,7 +24,7 @@ export default function LoginPage() {
       setError(signInErrorMessage(err, newPassword))
     } finally { setPassword(''); setBusy(false) }
   }
-  return <main className="login-page"><section className="login-card"><div className="brand"><span className="brand-mark">c</span>Contactly<span className="brand-dot">.</span></div><div className="eyebrow">BUSINESS WORKSPACE</div><h1>{newPassword ? 'Set your password' : 'Welcome back'}</h1><p>{newPassword ? 'Choose a permanent password to finish your first sign-in.' : 'Sign in to manage your customer community.'}</p>
+  return <main className="login-page"><section className="login-card"><div className="brand"><BrandIdentity branding={defaultBranding} compact /></div><div className="eyebrow">BUSINESS WORKSPACE</div><h1>{newPassword ? 'Set your password' : 'Welcome back'}</h1><p>{newPassword ? 'Choose a permanent password to finish your first sign-in.' : 'Sign in to manage your customer community.'}</p>
     <Notification message={error || (!authConfigured ? 'Login is not configured. Set the frontend Cognito environment variables and restart Vite.' : '')} variant="error" />
     {sessionMessage && <p role="status" className="login-session">{sessionMessage}</p>}
     <form onSubmit={submit}><fieldset disabled={busy || !authConfigured}>{!newPassword && <label>Email<input type="email" autoComplete="username" required value={email} onChange={event => setEmail(event.target.value)} /></label>}<label>{newPassword ? 'New password' : 'Password'}<input type="password" autoComplete={newPassword ? 'new-password' : 'current-password'} required value={password} onChange={event => setPassword(event.target.value)} /></label><button className="primary" type="submit">{busy ? 'Signing in…' : newPassword ? 'Set password and sign in' : 'Sign in'}</button>{newPassword && <button type="button" onClick={async () => { await cancelSignIn().catch(() => {}); setPassword(''); setError('') }}>Cancel and return to sign in</button>}</fieldset></form><small>Accounts are provided by your business administrator. Public sign-up is unavailable.</small>

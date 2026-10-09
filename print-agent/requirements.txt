@@ -1,2 +1,5 @@
 # Only real Windows printing imports this dependency. Simulation uses stdlib only.
 pywin32>=306,<400; sys_platform == 'win32'
+
+# Windows lacks an IANA database; required for Dublin/DST timestamp validation.
+tzdata>=2025.2; sys_platform == 'win32'

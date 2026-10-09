@@ -1,6 +1,7 @@
+import { loadEmployeeIdentity } from './employeeProfile'
 import { idTokenFromSession } from './cognitoTokens'
 import { Amplify } from 'aws-amplify'
-import { fetchAuthSession, signOut } from 'aws-amplify/auth'
+import { fetchAuthSession, fetchUserAttributes, signOut } from 'aws-amplify/auth'
 import { cognitoUserPoolsTokenProvider } from 'aws-amplify/auth/cognito'
 import { sessionStorage } from 'aws-amplify/utils'
 
@@ -25,4 +26,9 @@ export async function endSession() {
 }
 export function sessionExpired() {
   window.dispatchEvent(new Event('auth:expired'))
+}
+
+// Display-only Cognito profile enrichment after backend identity verification.
+export async function getDisplayIdentity(identity) {
+  return loadEmployeeIdentity(identity, { fetchAuthSession, fetchUserAttributes })
 }

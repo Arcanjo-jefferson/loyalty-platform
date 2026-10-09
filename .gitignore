@@ -11,3 +11,6 @@ frontend/dist/
 print-agent/.venv/
 print-agent/state/
 print-agent/config.local.json
+
+# Local print-agent configurations
+print-agent/config.*.local.json

@@ -930,6 +930,19 @@ change.
   client-credentials-only provisioning, verified five-minute TTL and HTTPS deployment
 - Existing public SPA SRP client must never be used for M2M; no AWS configuration changed
 - No provisioning/live auth, vault integration on real Windows, Epson/cutting or physical
-  printing verified. Owner UI, centralized audit export/retention and last-seen write
+  printing verified. Centralized audit export/retention and last-seen write
   throttling remain future deployment/scaling work
 - See print-agent/README.md for endpoint matrix, provisioning/rotation and acceptance
+
+Owner-only Print devices screen implemented: authenticated existing API, label registration,
+returned pending device ID/status, list/last-seen and confirmed disable/rotation.
+Manager/Staff navigation and direct route access blocked; backend enforcement unchanged.
+
+Ticket template version 3 adds consistent Issued date DD/MM/YYYY and Issued time HH:mm
+(hours and actual minutes) to all three ticket types, derived from the original server-issued UTC
+snapshot timestamp in Europe/Dublin/DST. Agent validates and preserves text; retries
+and REPRINT keep the timestamp. Legacy version 1 remains readable and unchanged.
+42-column receipt width and default physical-printing-disabled configuration remain.
+
+Ticket time correction: new version 3 snapshots include actual original minutes (HH:mm).
+Existing immutable version 1/2 snapshots remain supported without rewriting history.

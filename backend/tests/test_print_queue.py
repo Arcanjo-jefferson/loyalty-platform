@@ -73,6 +73,46 @@ class PrintTests(unittest.TestCase):
                 self.assertIn(voucher.voucher_code, job.ticket.receipt_text)
                 self.assertEqual(job.source_visit_id, voucher.qualifying_visit_id)
 
+    def test_all_ticket_types_issue_timestamp_survives_retry_and_later_reprint(self):
+        self.customer = self.customers.update('tenant-a', self.customer.customer_id, data(date_of_birth='1990-10-07'))
+        self.now = datetime(2026, 10, 7, 12, 45, tzinfo=timezone.utc); self.seed_history(4)
+        result = self.confirm()
+        self.assertEqual(len(self.jobs()), 3)
+        sources = {voucher.voucher_id: voucher.issued_at for voucher in result['vouchers']}
+        for job in self.jobs():
+            original = job.ticket
+            self.assertEqual(original.template_version, 3)
+            expected = sources[job.voucher_id] if job.voucher_id else result['raffle_entry'].created_at
+            self.assertEqual(original.issued_at, expected)
+            self.assertIn('Issued date: 07/10/2026', original.receipt_text)
+            self.assertIn('Issued time: 13:45', original.receipt_text.splitlines())
+            claim = self.act(job, 'claim')
+            self.act(job, 'fail', claim['claim_token'])
+            self.assertEqual(self.repo.get_print_job('tenant-a', job.print_job_id).ticket, original)
+            self.complete(job)
+            self.now += timedelta(days=1)
+            reprint = self.printing.reprint(self.owner, job.print_job_id, uuid4(), 'Paper damaged')
+            self.assertEqual(reprint['ticket']['issued_at'], original.model_dump(mode='json')['issued_at'])
+            self.assertEqual(reprint['ticket']['receipt_text'], 'REPRINT\n' + original.receipt_text)
+            self.assertTrue(all(len(line) <= 42 for line in reprint['ticket']['receipt_text'].splitlines()))
+            self.now -= timedelta(days=1)
+
+    def test_actual_issue_minutes_all_ticket_types_and_dublin_conversion(self):
+        self.customer = self.customers.update('tenant-a', self.customer.customer_id, data(date_of_birth='1990-10-07'))
+        self.now = datetime(2026, 10, 7, 12, tzinfo=timezone.utc); self.seed_history(4)
+        result = self.confirm()
+        for hour, minute, expected in [(8, 5, '09:05'), (12, 0, '13:00'), (16, 45, '17:45'), (22, 59, '23:59')]:
+            original = datetime(2026, 10, 7, hour, minute, tzinfo=timezone.utc)
+            entry = result['raffle_entry'].model_copy(update={'created_at': original})
+            vouchers = [voucher.model_copy(update={'issued_at': original}) for voucher in result['vouchers']]
+            jobs = jobs_for_visit(self.customer, result['visit'], entry, vouchers)
+            self.assertEqual(len(jobs), 3)
+            for job in jobs:
+                self.assertEqual(job.ticket.issued_at, original)
+                self.assertIn('Issued time: ' + expected, job.ticket.receipt_text.splitlines())
+                self.assertIn('Issued date: 07/10/2026', job.ticket.receipt_text.splitlines())
+                self.assertTrue(all(len(line) <= 42 for line in job.ticket.receipt_text.splitlines()))
+
     def test_duplicate_and_concurrent_confirmations_never_duplicate_jobs(self):
         barrier = Barrier(2)
         def confirm():
@@ -193,7 +233,8 @@ class PrintTests(unittest.TestCase):
         for job in self.jobs():
             self.assertNotIn('\u001b', job.ticket.receipt_text)
             self.assertTrue(all(len(line) <= 42 for line in job.ticket.receipt_text.splitlines()))
-            self.assertIn('07/10/2026 00:05 IST', job.ticket.receipt_text)
+            self.assertIn('Issued date: 07/10/2026', job.ticket.receipt_text)
+            self.assertIn('Issued time: 00:05', job.ticket.receipt_text.splitlines())
             self.assertIn('Customer signature:', job.ticket.receipt_text)
         self.assertEqual(len(self.repo.visits('tenant-a', self.customer.customer_id)), 5)
 

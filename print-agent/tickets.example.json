@@ -5,8 +5,11 @@
     "created_at": "2026-10-08T12:00:00Z",
     "ticket_type": "DAILY_RAFFLE",
     "ticket": {
-      "receipt_text": "Trumps\nDaily Raffle\nFictional Customer\nSignature: __________________\n",
-      "receipt_columns": 42
+      "receipt_text": "Trumps\nDaily Raffle\nFictional Customer\nSignature: __________________\n\nIssued date: 08/10/2026\nIssued time: 13:00\nEurope/Dublin\n",
+      "receipt_columns": 42,
+      "template_version": 3,
+      "issued_at": "2026-10-08T12:00:00Z",
+      "timezone": "Europe/Dublin"
     }
   },
   {
@@ -15,8 +18,11 @@
     "created_at": "2026-10-08T12:00:00Z",
     "ticket_type": "LOYALTY_10",
     "ticket": {
-      "receipt_text": "Trumps\n€10 Loyalty Voucher\nTEST-LOYALTY-CODE\n",
-      "receipt_columns": 42
+      "receipt_text": "Trumps\n€10 Loyalty Voucher\nTEST-LOYALTY-CODE\n\nIssued date: 08/10/2026\nIssued time: 13:00\nEurope/Dublin\n",
+      "receipt_columns": 42,
+      "template_version": 3,
+      "issued_at": "2026-10-08T12:00:00Z",
+      "timezone": "Europe/Dublin"
     }
   },
   {
@@ -25,8 +31,11 @@
     "created_at": "2026-10-08T12:00:00Z",
     "ticket_type": "BIRTHDAY_20",
     "ticket": {
-      "receipt_text": "Trumps\n€20 Birthday Voucher\nTEST-BIRTHDAY-CODE\n",
-      "receipt_columns": 42
+      "receipt_text": "Trumps\n€20 Birthday Voucher\nTEST-BIRTHDAY-CODE\n\nIssued date: 08/10/2026\nIssued time: 13:00\nEurope/Dublin\n",
+      "receipt_columns": 42,
+      "template_version": 3,
+      "issued_at": "2026-10-08T12:00:00Z",
+      "timezone": "Europe/Dublin"
     }
   }
 ]
