@@ -43,3 +43,26 @@ test('installed Amplify confirms the original Cognito session, caches tokens and
     assert.equal((await fetchAuthSession()).tokens, undefined)
   } finally { globalThis.fetch = originalFetch }
 })
+
+test('installed Amplify uses the configured client and SRP while rejection skips identity enrichment', async () => {
+  const originalFetch = globalThis.fetch
+  let accepted = false; let called = 0
+  globalThis.fetch = async (input, options) => {
+    const request = input instanceof Request ? input : new Request(input, options)
+    // Synthetic credentials/config only. Nothing is logged or sent to AWS.
+    const body = await request.json()
+    assert.equal(request.headers.get('x-amz-target').split('.').at(-1), 'InitiateAuth')
+    assert.equal(body.ClientId, 'fixtureclient')
+    assert.equal(body.AuthFlow, 'USER_SRP_AUTH')
+    assert.equal(body.AuthParameters.USERNAME, 'Owner.MixedCase@example.test')
+    assert.equal(Object.hasOwn(body.AuthParameters, 'PASSWORD'), false)
+    called++
+    return Response.json({ __type: 'NotAuthorizedException', message: 'Synthetic authentication rejection' }, { status: 400 })
+  }
+  try {
+    Amplify.configure({ Auth: { Cognito: { userPoolId: 'eu-west-1_TestPool', userPoolClientId: 'fixtureclient', loginWith: { email: true } } } })
+    const flow = createSignInFlow({ signIn, confirmSignIn, endSession: signOut, acceptSession: async () => { accepted = true } })
+    await assert.rejects(flow.login(' Owner.MixedCase@example.test ', 'synthetic-password'), { name: 'NotAuthorizedException' })
+    assert.equal(called, 1); assert.equal(accepted, false)
+  } finally { globalThis.fetch = originalFetch }
+})

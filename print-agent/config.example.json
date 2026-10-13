@@ -1,0 +1,10 @@
+{
+  "mode": "simulation",
+  "fixture": "tickets.example.json",
+  "state_directory": "state",
+  "poll_seconds": 3,
+  "timeout_seconds": 10,
+  "backend_url": "http://127.0.0.1:8000/development/print-agent",
+  "printer_name": "",
+  "allow_development_printing": false
+}

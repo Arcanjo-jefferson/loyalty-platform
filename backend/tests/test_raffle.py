@@ -238,7 +238,7 @@ class RaffleTransactionTests(RaffleTests):
         writes = [params for operation, params in self.db.calls if operation == 'transact_write_items'][-1]
         types = [self.db.decode(action['Put']['Item'])['item_type'] for action in writes['TransactItems'] if 'Put' in action]
         for kind in ['RAFFLE_ENTRY', 'RAFFLE_DATE_INDEX', 'VISIT']: self.assertEqual(types.count(kind), 1)
-        self.assertEqual(types.count('VOUCHER'), 2); self.assertEqual(len(writes['TransactItems']), 10)
+        self.assertEqual(types.count('VOUCHER'), 2); self.assertEqual(len(writes['TransactItems']), 13)
         client = boto3.client('dynamodb', region_name='eu-west-1', aws_access_key_id='fixture', aws_secret_access_key='fixture')
         with Stubber(client) as stub:
             stub.add_response('transact_write_items', {}, writes); client.transact_write_items(**writes)

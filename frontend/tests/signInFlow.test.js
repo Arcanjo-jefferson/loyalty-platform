@@ -62,3 +62,20 @@ test('overlapping requests cannot restart or cancel an in-flight transaction', a
 test('unknown internal troubleshooting is never exposed', () => {
   assert.doesNotMatch(signInErrorMessage(new Error('private troubleshooting')), /private troubleshooting/)
 })
+
+test('login preserves email case, trims only username edges and passes password unchanged', async () => {
+  const { flow, calls } = setup()
+  const password = '  Synthetic-PassWord!\t'
+  await flow.login('  Owner.MixedCase@example.test  ', password)
+  assert.deepEqual(calls[0][1], { username: 'Owner.MixedCase@example.test', password, options: { authFlowType: 'USER_SRP_AUTH' } })
+})
+
+test('Cognito rejection never runs backend identity/profile enrichment or signs out/reset auth', async () => {
+  let accepted = 0; let ended = 0; let attempts = 0
+  const rejection = Object.assign(new Error('Synthetic service rejection'), { name: 'NotAuthorizedException' })
+  const flow = createSignInFlow({ signIn: async () => { attempts++; throw rejection }, confirmSignIn: async () => assert.fail('No challenge'), acceptSession: async () => { accepted++ }, endSession: async () => { ended++ } })
+  await assert.rejects(flow.login('owner@example.test', 'synthetic-password'), { name: 'NotAuthorizedException' })
+  assert.equal(accepted, 0); assert.equal(ended, 0); assert.equal(flow.getStep(), 'SIGN_IN')
+  await assert.rejects(flow.login('owner@example.test', 'synthetic-password'), { name: 'NotAuthorizedException' })
+  assert.equal(attempts, 2); assert.equal(accepted, 0)
+})

@@ -6,6 +6,8 @@ from botocore.exceptions import BotoCoreError, ClientError
 from pydantic import ValidationError
 from .models import Visit
 from .raffle import raffle_for_visit
+from .tickets import jobs_for_visit
+from .print_repository import guard_transaction
 from .visit_dates import normalize_visit, local_visit_date
 from .repository import ConcurrentModification, DuplicateQR, DuplicateVisit, InactiveCustomer, StorageUnavailable
 
@@ -111,17 +113,17 @@ class DynamoLoyaltyMixin:
                       'ExpressionAttributeValues': self._encode(values)}}
             put = {'Put': {'TableName': self.table_name, 'Item': self._encode(data),
                    'ConditionExpression': 'attribute_not_exists(#pk)', 'ExpressionAttributeNames': {'#pk': 'business_id'}}}
-            # Reward eligibility uses the actual persisted DOB. If a manager edits
-            # the customer concurrently, retry the whole decision using that DOB.
-            if reward_factory:
-                update['Update']['ConditionExpression'] += ' AND #updated = :updated'
-                update['Update']['ExpressionAttributeNames']['#updated'] = 'updated_at'
-                update['Update']['ExpressionAttributeValues'].update(self._encode({':updated': item['updated_at']}))
+            # Rewards and immutable ticket PII must use the same persisted customer revision.
+            update['Update']['ConditionExpression'] += ' AND #updated = :updated'
+            update['Update']['ExpressionAttributeNames']['#updated'] = 'updated_at'
+            update['Update']['ExpressionAttributeValues'].update(self._encode({':updated': item['updated_at']}))
             entry = raffle_for_visit(saved)
-            transaction = {'TransactItems': [update, put] + self._raffle_transactions(entry) + self._reward_transactions(vouchers), 'ClientRequestToken': str(uuid4())}
+            jobs = jobs_for_visit(self._customer(item), saved, entry, vouchers)
+            transaction = {'TransactItems': [update, put] + self._raffle_transactions(entry) + self._reward_transactions(vouchers) + [self._print_put(job) for job in jobs], 'ClientRequestToken': str(uuid4())}
+            guard_transaction(transaction['TransactItems'])
             try:
                 self.client.transact_write_items(**transaction)
-                return self._customer(item), saved, count + 1, vouchers, entry
+                return self._customer(item), saved, count + 1, vouchers, entry, jobs
             except ClientError as exc:
                 code = exc.response.get('Error', {}).get('Code')
                 reasons = exc.response.get('CancellationReasons', [])

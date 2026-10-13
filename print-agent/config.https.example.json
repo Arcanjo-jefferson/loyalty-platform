@@ -1,0 +1,14 @@
+{
+  "mode": "simulation",
+  "fixture": "tickets.example.json",
+  "state_directory": "state",
+  "poll_seconds": 3,
+  "timeout_seconds": 10,
+  "backend_url": "https://api.example.invalid/print-agent",
+  "token_url": "https://example.auth.eu-west-1.amazoncognito.com/oauth2/token",
+  "client_id": "REPLACE_AFTER_CONFIDENTIAL_DEVICE_CLIENT_PROVISIONING",
+  "scope": "contactly-print/queue",
+  "credential_target": "Contactly/PrintAgent/REPLACE_WITH_DEVICE_UUID",
+  "printer_name": "",
+  "allow_physical_printing": false
+}

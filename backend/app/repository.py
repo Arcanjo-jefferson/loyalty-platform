@@ -6,6 +6,8 @@ from .models import Customer, Visit, Voucher, RaffleEntry
 from .voucher_rules import effective_voucher, reward_key
 from .visit_dates import normalize_visit, local_visit_date
 from .raffle import raffle_for_visit
+from .tickets import jobs_for_visit
+from .print_models import PrintJobNotFound, PrintJobConflict, PrintJob
 
 
 class DuplicatePhone(Exception):
@@ -34,7 +36,11 @@ class InactiveCustomer(Exception):
 
 class CustomerRepository(Protocol):
     def find_active_by_qr(self, business_id: str, qr_token: str) -> Customer | None: ...
-    def record_visit(self, visit: Visit, reward_factory=None) -> tuple[Customer, Visit, int, list[Voucher], RaffleEntry]: ...
+    def record_visit(self, visit: Visit, reward_factory=None) -> tuple[Customer, Visit, int, list[Voucher], RaffleEntry, list[PrintJob]]: ...
+    def get_print_job(self, business_id: str, job_id: str) -> PrintJob: ...
+    def print_jobs(self, business_id: str, customer_id=None, visit_id=None) -> list[PrintJob]: ...
+    def save_print_change(self, previous: PrintJob, updated: PrintJob) -> None: ...
+    def save_reprint(self, original: PrintJob, updated: PrintJob, job: PrintJob) -> None: ...
     def manage_qr(self, business_id: str, customer_id: str, *, expected_token: str | None = None): ...
     def public_qr_token(self, reference: str) -> str: ...
     def reward_exists(self, business_id: str, key: str) -> bool: ...
@@ -64,6 +70,7 @@ class InMemoryCustomerRepository:
         self._media = {}
         self._qr = {}
         self._visits = {}
+        self._print_jobs = {}
         self._raffle_entries = {}
         self._vouchers = {}
         self._reward_locks = {}
@@ -145,13 +152,43 @@ class InMemoryCustomerRepository:
             entry = raffle_for_visit(saved)
             entry_key = (entry.business_id, entry.customer_id, entry.visit_id)
             if entry_key in self._raffle_entries: raise ConcurrentModification()
+            jobs = jobs_for_visit(customer, saved, entry, vouchers)
+            if any((job.business_id, job.print_job_id) in self._print_jobs for job in jobs): raise ConcurrentModification()
             for voucher in vouchers:
                 self._vouchers[(voucher.business_id, voucher.customer_id, voucher.voucher_id)] = voucher.model_copy(deep=True)
                 self._reward_locks[(voucher.business_id, reward_key(voucher))] = voucher.voucher_id
                 self._voucher_codes[(voucher.business_id, voucher.voucher_code)] = (voucher.customer_id, voucher.voucher_id)
             self._visits[(visit.business_id, visit.visit_id)] = saved
             self._raffle_entries[entry_key] = entry
-            return customer, saved, saved.visit_number, vouchers, entry
+            for job in jobs: self._print_jobs[(job.business_id, job.print_job_id)] = job.model_copy(deep=True)
+            return customer, saved, saved.visit_number, vouchers, entry, jobs
+
+    def get_print_job(self, business_id, job_id):
+        with self._lock:
+            job = self._print_jobs.get((business_id, job_id))
+            if not job: raise PrintJobNotFound()
+            return job.model_copy(deep=True)
+
+    def print_jobs(self, business_id, customer_id=None, visit_id=None):
+        with self._lock:
+            return sorted([job.model_copy(deep=True) for job in self._print_jobs.values()
+                           if job.business_id == business_id and (not customer_id or job.customer_id == customer_id)
+                           and (not visit_id or job.source_visit_id == visit_id)],
+                          key=lambda job: (job.created_at, job.print_job_id), reverse=True)
+
+    def save_print_change(self, previous, updated):
+        with self._lock:
+            current = self.get_print_job(previous.business_id, previous.print_job_id)
+            if current.revision != previous.revision: raise PrintJobConflict('Job changed. Refresh before trying again.')
+            self._print_jobs[(updated.business_id, updated.print_job_id)] = updated.model_copy(deep=True)
+
+    def save_reprint(self, original, updated, job):
+        with self._lock:
+            current = self.get_print_job(original.business_id, original.print_job_id)
+            if current.revision != original.revision or (job.business_id, job.print_job_id) in self._print_jobs:
+                raise PrintJobConflict('Job changed. Refresh before trying again.')
+            self._print_jobs[(updated.business_id, updated.print_job_id)] = updated.model_copy(deep=True)
+            self._print_jobs[(job.business_id, job.print_job_id)] = job.model_copy(deep=True)
 
     def raffle_entries(self, business_id, customer_id):
         with self._lock:

@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import './theme.css'
 import './index.css'
 import AuthGate from './components/AuthGate'
 import AuthProvider from './components/AuthProvider'

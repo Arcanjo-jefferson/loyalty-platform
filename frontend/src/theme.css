@@ -1,0 +1,17 @@
+/* Neutral theme applies before authentication and to public pages. Authenticated
+   app-shell overrides these same variables using the verified business config. */
+:root {
+  --font-interface: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-wordmark: "Outfit", "Manrope", sans-serif;
+  --theme-primary: #D7B477;
+  --theme-accent: #D7B477;
+  --theme-background: #111C29;
+  --theme-surface: #182635;
+  --theme-text: #F1E8D8;
+  --theme-muted: #B4C0CB;
+  --theme-primary-text: #111C29;
+  --theme-border: #728394;
+  --theme-soft: #223244;
+  --theme-selected-text: #111C29;
+  --theme-focus: #D7B477;
+}
