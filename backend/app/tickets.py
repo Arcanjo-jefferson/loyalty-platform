@@ -25,19 +25,27 @@ def ticket_snapshot(customer, visit, entry, voucher=None):
     name = clean_text(f'{customer.first_name} {customer.last_name}')
     reference = voucher.voucher_id if voucher else entry.raffle_entry_id
     issued = voucher.issued_at if voucher else entry.created_at
-    lines = [business, 'BIRTHDAY VOUCHER' if kind == 'BIRTHDAY_20' else 'LOYALTY BONUS', '', name, customer.phone, '']
-    if voucher:
-        lines += ['€10 Loyalty Voucher' if kind == 'LOYALTY_10' else '€20 Birthday Voucher',
-                  'Voucher code:', voucher.voucher_code,
-                  'Valid until (exclusive): ' + local_time(voucher.expires_at)]
+    header = '*** HAPPY BIRTHDAY! ***' if kind == 'BIRTHDAY_20' else '*** LOYALTY BONUS ***'
+    lines = [header, '', name, '']
+    if kind == 'BIRTHDAY_20':
+        lines += ['€20 BIRTHDAY VOUCHER', '', 'Happy Birthday!',
+                  'Wishing you a wonderful day from everyone at Trumps Plaza.', '',
+                  'Enjoy your birthday gift!']
+    elif kind == 'LOYALTY_10':
+        lines += ['€10 LOYALTY VOUCHER', '', 'CONGRATULATIONS!', '',
+                  'You have completed 5 loyalty visits and earned a €10 voucher!', '',
+                  'Thank you for being part of our Loyalty Club.']
     else:
-        lines += ['You have just entered our Daily Raffle!', 'Please sign and place in Raffle Drum.', 'GOOD LUCK!',
-                  'Visit/raffle: ' + reference]
+        lines += ['You have just entered our Daily Raffle!',
+                  'Please sign and place your ticket in the Raffle Drum.', '', 'GOOD LUCK!']
     issued_local = issued.astimezone(ZoneInfo('Europe/Dublin'))
-    lines += ['', 'Issued date: ' + issued_local.strftime('%d/%m/%Y'),
+    lines += ['', 'I confirm receipt of the voucher.' if voucher else 'I confirm receipt of the ticket.',
+              '', '', '', 'Signed: __________________________', '',
+              'Issued date: ' + issued_local.strftime('%d/%m/%Y'),
               'Issued time: ' + issued_local.strftime('%H:%M')]
-    lines += ['', 'Customer signature:', '_______________________________', '', 'Europe/Dublin']
-    receipt = '\n'.join('\n'.join(textwrap.wrap(line, width=42)) if line else '' for line in lines)
+    # Spaces centre EVERY wrapped line on the existing fixed-width thermal layout.
+    receipt = '\n'.join(part.center(42) if part else '' for line in lines
+                        for part in (textwrap.wrap(line, width=42) if line else ['']))
     return TicketSnapshot(business_name=business, customer_name=name, phone=customer.phone, ticket_type=kind,
                           source_reference=reference, voucher_code=voucher.voucher_code if voucher else None,
                           issued_at=issued, expires_at=voucher.expires_at if voucher else None, receipt_text=receipt)

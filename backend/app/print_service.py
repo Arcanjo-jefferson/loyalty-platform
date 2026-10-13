@@ -63,7 +63,7 @@ class PrintService:
         parent = change(original, now, user.subject, 'REPRINT_REQUESTED', status=status,
                         claim_token=None, claimed_by=None, lease_until=None)
         parent = parent.model_copy(update={'audit': (*original.audit, PrintAudit(action='REPRINT_REQUESTED', at=now, actor=user.subject, reason=reason))})
-        ticket = original.ticket.model_copy(update={'receipt_text': 'REPRINT\n' + original.ticket.receipt_text})
+        ticket = original.ticket.model_copy(update={'receipt_text': ('REPRINT'.center(42) if original.ticket.template_version >= 4 else 'REPRINT') + '\n' + original.ticket.receipt_text})
         child = original.model_copy(update={'print_job_id': new_id, 'status': 'PENDING', 'created_at': now, 'updated_at': now,
                     'attempt_count': 0, 'printed_at': None, 'last_error': None, 'claim_token': None, 'claimed_by': None,
                     'lease_until': None, 'revision': str(uuid4()), 'ticket': ticket, 'reprint_of': original.print_job_id,

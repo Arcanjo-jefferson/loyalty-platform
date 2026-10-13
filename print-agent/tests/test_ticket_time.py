@@ -17,8 +17,8 @@ class TicketTimeTests(unittest.TestCase):
                 original=copy.deepcopy(job)
                 text=receipt_text(job)
                 self.assertIn('Issued date: 08/10/2026',text)
-                self.assertIn('Issued time: 13:00',text.splitlines())
-                self.assertTrue(all(len(line)<=42 for line in text.splitlines()))
+                self.assertIn('Issued time: 13:00',[line.strip() for line in text.splitlines()])
+                self.assertTrue(all(len(line)<=42 for line in [line.strip() for line in text.splitlines()]))
                 payload=printer.prepare(job); name=printer.submit(job,payload)
                 self.assertEqual((Path(folder)/name).read_text(),text)
                 self.assertEqual(job,original)
@@ -66,3 +66,21 @@ class TicketTimeTests(unittest.TestCase):
         original=copy.deepcopy(job)
         self.assertEqual(receipt_text(job),original['ticket']['receipt_text'])
         self.assertEqual(job,original)
+
+    def test_centred_design_and_large_amounts_preserve_width_without_printer_access(self):
+        from contactly_agent.formatting import thermal_content
+        for job in self.fixtures():
+            text = receipt_text(job)
+            for line in text.splitlines():
+                if line:
+                    self.assertEqual(line, line.strip().center(42))
+            payload = thermal_content(job, text)
+            amount = '€10 LOYALTY VOUCHER' if job['ticket_type'] == 'LOYALTY_10' else '€20 BIRTHDAY VOUCHER'
+            if job['ticket_type'] != 'DAILY_RAFFLE':
+                self.assertIn(b'\x1b!\x10' + amount.center(42).encode('cp858') + b'\x1b!\x00', payload)
+            self.assertNotIn(b'TEST-CODE', payload)
+            self.assertNotIn(b'fixture-raffle', payload)
+            self.assertIn(b'\n\n\n\n', payload)
+            legacy = copy.deepcopy(job)
+            legacy['ticket']['template_version'] = 3
+            self.assertEqual(thermal_content(legacy, text), text.encode('cp858'))

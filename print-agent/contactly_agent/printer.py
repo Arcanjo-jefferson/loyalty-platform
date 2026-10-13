@@ -2,7 +2,7 @@
 from pathlib import Path
 import hashlib
 import os
-from .formatting import receipt_text
+from .formatting import receipt_text, thermal_content
 
 class SimulationPrinter:
     def __init__(self, directory):
@@ -32,7 +32,7 @@ class WindowsPrinter:
         if any(ord(ch) < 32 and ch != '\n' for ch in text):
             raise ValueError('Unsafe receipt control character.')
         # Strict encoding: unsupported names fail before output, never silently corrupt.
-        payload = b'\x1b@\x1bt\x13' + text.encode('cp858') + b'\n\n\x1dVB\x00'
+        payload = b'\x1b@\x1bt\x13' + thermal_content(job, text) + b'\n\n\x1dVB\x00'
         handle = self.api.OpenPrinter(self.name)
         try:
             info = self.api.GetPrinter(handle, 2)

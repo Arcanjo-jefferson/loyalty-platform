@@ -5,10 +5,17 @@
     "created_at": "2026-10-08T12:00:00Z",
     "ticket_type": "DAILY_RAFFLE",
     "ticket": {
-      "receipt_text": "Trumps\nDaily Raffle\nFictional Customer\nSignature: __________________\n\nIssued date: 08/10/2026\nIssued time: 13:00\nEurope/Dublin\n",
-      "receipt_columns": 42,
-      "template_version": 3,
+      "template_version": 4,
+      "business_name": "Trumps",
+      "customer_name": "Fictional Customer",
+      "phone": "+353831234567",
+      "ticket_type": "DAILY_RAFFLE",
+      "source_reference": "fixture-raffle",
+      "voucher_code": null,
       "issued_at": "2026-10-08T12:00:00Z",
+      "expires_at": null,
+      "receipt_text": "          *** LOYALTY BONUS ***           \n\n            Fictional Customer            \n\n You have just entered our Daily Raffle!  \n Please sign and place your ticket in the \n               Raffle Drum.               \n\n                GOOD LUCK!                \n\n     I confirm receipt of the ticket.     \n\n\n\n    Signed: __________________________    \n\n         Issued date: 08/10/2026          \n            Issued time: 13:00            ",
+      "receipt_columns": 42,
       "timezone": "Europe/Dublin"
     }
   },
@@ -18,10 +25,17 @@
     "created_at": "2026-10-08T12:00:00Z",
     "ticket_type": "LOYALTY_10",
     "ticket": {
-      "receipt_text": "Trumps\n€10 Loyalty Voucher\nTEST-LOYALTY-CODE\n\nIssued date: 08/10/2026\nIssued time: 13:00\nEurope/Dublin\n",
-      "receipt_columns": 42,
-      "template_version": 3,
+      "template_version": 4,
+      "business_name": "Trumps",
+      "customer_name": "Fictional Customer",
+      "phone": "+353831234567",
+      "ticket_type": "LOYALTY_10",
+      "source_reference": "fixture-voucher",
+      "voucher_code": "TEST-CODE",
       "issued_at": "2026-10-08T12:00:00Z",
+      "expires_at": "2026-10-08T12:00:00Z",
+      "receipt_text": "          *** LOYALTY BONUS ***           \n\n            Fictional Customer            \n\n           €10 LOYALTY VOUCHER            \n\n             CONGRATULATIONS!             \n\n You have completed 5 loyalty visits and  \n          earned a €10 voucher!           \n\n Thank you for being part of our Loyalty  \n                  Club.                   \n\n    I confirm receipt of the voucher.     \n\n\n\n    Signed: __________________________    \n\n         Issued date: 08/10/2026          \n            Issued time: 13:00            ",
+      "receipt_columns": 42,
       "timezone": "Europe/Dublin"
     }
   },
@@ -31,10 +45,17 @@
     "created_at": "2026-10-08T12:00:00Z",
     "ticket_type": "BIRTHDAY_20",
     "ticket": {
-      "receipt_text": "Trumps\n€20 Birthday Voucher\nTEST-BIRTHDAY-CODE\n\nIssued date: 08/10/2026\nIssued time: 13:00\nEurope/Dublin\n",
-      "receipt_columns": 42,
-      "template_version": 3,
+      "template_version": 4,
+      "business_name": "Trumps",
+      "customer_name": "Fictional Customer",
+      "phone": "+353831234567",
+      "ticket_type": "BIRTHDAY_20",
+      "source_reference": "fixture-voucher",
+      "voucher_code": "TEST-CODE",
       "issued_at": "2026-10-08T12:00:00Z",
+      "expires_at": "2026-10-08T12:00:00Z",
+      "receipt_text": "         *** HAPPY BIRTHDAY! ***          \n\n            Fictional Customer            \n\n           €20 BIRTHDAY VOUCHER           \n\n             Happy Birthday!              \nWishing you a wonderful day from everyone \n             at Trumps Plaza.             \n\n        Enjoy your birthday gift!         \n\n    I confirm receipt of the voucher.     \n\n\n\n    Signed: __________________________    \n\n         Issued date: 08/10/2026          \n            Issued time: 13:00            ",
+      "receipt_columns": 42,
       "timezone": "Europe/Dublin"
     }
   }

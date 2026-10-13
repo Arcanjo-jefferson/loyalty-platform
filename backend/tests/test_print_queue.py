@@ -70,7 +70,7 @@ class PrintTests(unittest.TestCase):
                 job = next(job for job in self.jobs() if job.voucher_id == voucher.voucher_id)
                 self.assertEqual(job.ticket.voucher_code, voucher.voucher_code)
                 self.assertEqual(job.ticket.expires_at, voucher.expires_at)
-                self.assertIn(voucher.voucher_code, job.ticket.receipt_text)
+                self.assertNotIn(voucher.voucher_code, job.ticket.receipt_text)
                 self.assertEqual(job.source_visit_id, voucher.qualifying_visit_id)
 
     def test_all_ticket_types_issue_timestamp_survives_retry_and_later_reprint(self):
@@ -81,11 +81,11 @@ class PrintTests(unittest.TestCase):
         sources = {voucher.voucher_id: voucher.issued_at for voucher in result['vouchers']}
         for job in self.jobs():
             original = job.ticket
-            self.assertEqual(original.template_version, 3)
+            self.assertEqual(original.template_version, 4)
             expected = sources[job.voucher_id] if job.voucher_id else result['raffle_entry'].created_at
             self.assertEqual(original.issued_at, expected)
             self.assertIn('Issued date: 07/10/2026', original.receipt_text)
-            self.assertIn('Issued time: 13:45', original.receipt_text.splitlines())
+            self.assertIn('Issued time: 13:45', [line.strip() for line in original.receipt_text.splitlines()])
             claim = self.act(job, 'claim')
             self.act(job, 'fail', claim['claim_token'])
             self.assertEqual(self.repo.get_print_job('tenant-a', job.print_job_id).ticket, original)
@@ -93,7 +93,7 @@ class PrintTests(unittest.TestCase):
             self.now += timedelta(days=1)
             reprint = self.printing.reprint(self.owner, job.print_job_id, uuid4(), 'Paper damaged')
             self.assertEqual(reprint['ticket']['issued_at'], original.model_dump(mode='json')['issued_at'])
-            self.assertEqual(reprint['ticket']['receipt_text'], 'REPRINT\n' + original.receipt_text)
+            self.assertEqual(reprint['ticket']['receipt_text'], 'REPRINT'.center(42) + '\n' + original.receipt_text)
             self.assertTrue(all(len(line) <= 42 for line in reprint['ticket']['receipt_text'].splitlines()))
             self.now -= timedelta(days=1)
 
@@ -109,9 +109,9 @@ class PrintTests(unittest.TestCase):
             self.assertEqual(len(jobs), 3)
             for job in jobs:
                 self.assertEqual(job.ticket.issued_at, original)
-                self.assertIn('Issued time: ' + expected, job.ticket.receipt_text.splitlines())
-                self.assertIn('Issued date: 07/10/2026', job.ticket.receipt_text.splitlines())
-                self.assertTrue(all(len(line) <= 42 for line in job.ticket.receipt_text.splitlines()))
+                self.assertIn('Issued time: ' + expected, [line.strip() for line in job.ticket.receipt_text.splitlines()])
+                self.assertIn('Issued date: 07/10/2026', [line.strip() for line in job.ticket.receipt_text.splitlines()])
+                self.assertTrue(all(len(line) <= 42 for line in [line.strip() for line in job.ticket.receipt_text.splitlines()]))
 
     def test_duplicate_and_concurrent_confirmations_never_duplicate_jobs(self):
         barrier = Barrier(2)
@@ -138,7 +138,7 @@ class PrintTests(unittest.TestCase):
         reprint = self.printing.reprint(self.owner, job.print_job_id, request_id, 'Damaged receipt verified by operator')
         self.assertEqual(reprint['status'], 'PENDING'); self.assertEqual(reprint['display_status'], 'Queued')
         self.assertEqual(reprint['ticket']['voucher_code'], job.ticket.voucher_code)
-        self.assertEqual(reprint['ticket']['receipt_text'], 'REPRINT\n' + job.ticket.receipt_text)
+        self.assertEqual(reprint['ticket']['receipt_text'], 'REPRINT'.center(42) + '\n' + job.ticket.receipt_text)
         self.assertEqual(reprint['reprint_of'], job.print_job_id)
         again = self.printing.reprint(self.owner, job.print_job_id, request_id, 'Damaged receipt verified by operator')
         self.assertEqual(again['print_job_id'], reprint['print_job_id'])
@@ -232,10 +232,10 @@ class PrintTests(unittest.TestCase):
         self.confirm()
         for job in self.jobs():
             self.assertNotIn('\u001b', job.ticket.receipt_text)
-            self.assertTrue(all(len(line) <= 42 for line in job.ticket.receipt_text.splitlines()))
+            self.assertTrue(all(len(line) <= 42 for line in [line.strip() for line in job.ticket.receipt_text.splitlines()]))
             self.assertIn('Issued date: 07/10/2026', job.ticket.receipt_text)
-            self.assertIn('Issued time: 00:05', job.ticket.receipt_text.splitlines())
-            self.assertIn('Customer signature:', job.ticket.receipt_text)
+            self.assertIn('Issued time: 00:05', [line.strip() for line in job.ticket.receipt_text.splitlines()])
+            self.assertIn('Signed: __________________________', job.ticket.receipt_text)
         self.assertEqual(len(self.repo.visits('tenant-a', self.customer.customer_id)), 5)
 
     def test_initial_trumps_branding_and_timezone_safe_ticket_sources(self):
@@ -245,9 +245,9 @@ class PrintTests(unittest.TestCase):
         entry = result['raffle_entry'].model_copy(update={'business_id': 'trumps'})
         job = jobs_for_visit(customer, visit, entry, [])[0]
         self.assertEqual(job.ticket.business_name, 'Trumps')
-        self.assertTrue(job.ticket.receipt_text.startswith('Trumps\nLOYALTY BONUS'))
+        self.assertTrue(job.ticket.receipt_text.splitlines()[0].strip() == '*** LOYALTY BONUS ***')
         self.assertIn('You have just entered our Daily Raffle!', job.ticket.receipt_text)
-        self.assertIn('Please sign and place in Raffle Drum.', job.ticket.receipt_text)
+        self.assertIn('Please sign and place your ticket in the', job.ticket.receipt_text)
         self.assertIn('GOOD LUCK!', job.ticket.receipt_text)
 
     def test_lookup_redemption_and_qr_regeneration_do_not_queue_tickets(self):
@@ -405,7 +405,7 @@ class PrintAPITests(unittest.TestCase):
             body['confirmed'] = True
             status, reprint = self.call('POST', path + '/reprint', body)
             self.assertEqual(status, 201); self.assertEqual(reprint['display_status'], 'Queued')
-            self.assertTrue(reprint['ticket']['receipt_text'].startswith('REPRINT\n'))
+            self.assertTrue(reprint['ticket']['receipt_text'].startswith('REPRINT'.center(42) + '\n'))
             self.assertEqual(self.call('POST', path + '/reprint', body)[1]['print_job_id'], reprint['print_job_id'])
             self.assertEqual(len(self.repo.print_jobs('tenant-a', customer.customer_id)), 2)
 
@@ -419,3 +419,29 @@ class PrintAPITests(unittest.TestCase):
         self.assertEqual(self.call('POST', self.path + '/claim', {})[0], 409)
         self.assertEqual(self.call('POST', self.path + '/review', {})[1]['status'], 'UNCERTAIN')
         self.assertEqual(len(self.repo.print_jobs('tenant-a')), 1)
+
+
+def test_new_ticket_design_centres_each_line_and_hides_identifiers():
+    from types import SimpleNamespace as S
+    from app.tickets import ticket_snapshot
+    from datetime import datetime, timezone
+    instant = datetime(2026, 10, 8, 8, 5, tzinfo=timezone.utc)
+    customer = S(business_id='trumps', first_name='Fictional', last_name='Customer', phone='+353831234567')
+    entry = S(raffle_entry_id='private-raffle-id', created_at=instant)
+    for kind in ['DAILY_RAFFLE', 'LOYALTY_10', 'BIRTHDAY_20']:
+        voucher = None if kind == 'DAILY_RAFFLE' else S(type=kind, voucher_id='private-voucher-id', voucher_code='PRIVATE-CODE', issued_at=instant, expires_at=instant)
+        ticket = ticket_snapshot(customer, None, entry, voucher)
+        text = ticket.receipt_text
+        assert ticket.template_version == 4
+        for line in text.splitlines():
+            if line:
+                assert len(line) == 42
+                assert line == line.strip().center(42)
+        assert '\n\n\n\n' in text
+        for secret in [customer.phone, entry.raffle_entry_id, 'private-voucher-id', 'PRIVATE-CODE']:
+            assert secret not in text
+        assert 'Issued time: 09:05' in text
+        assert ticket.source_reference == (voucher.voucher_id if voucher else entry.raffle_entry_id)
+        if voucher:
+            assert ticket.voucher_code == voucher.voucher_code
+            assert ('€10 LOYALTY VOUCHER' if kind == 'LOYALTY_10' else '€20 BIRTHDAY VOUCHER') in text
