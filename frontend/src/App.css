@@ -149,3 +149,71 @@
   .login-card .wordmark { font-size: clamp(34px, 9vw, 40px); }
   .header-brand .wordmark { font-size: 25px; }
 }
+
+/* SMS simulation uses existing tenant theme variables. */
+.sms-workspace { display: grid; gap: 24px; }
+.sms-panel { padding: clamp(18px, 3vw, 28px); }
+.sms-panel h2, .sms-panel p, .sms-preview { margin-bottom: 16px; }
+.sms-panel fieldset { display: grid; gap: 16px; border: 1px solid var(--theme-border); padding: 18px; border-radius: 8px; min-width: 0; }
+.sms-panel label { display: block; }
+.sms-panel input[type="search"], .sms-panel select, .sms-panel textarea { width: 100%; margin-top: 6px; background: var(--theme-background); color: var(--theme-text); border: 1px solid var(--theme-border); border-radius: 6px; padding: 10px; font: inherit; }
+.sms-panel textarea { resize: vertical; }
+.sms-preview, .sms-confirm { margin-top: 20px; }
+.sms-confirm { display: grid; gap: 12px; }
+.sms-body { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; background: var(--theme-soft); padding: 14px; margin: 12px 0; }
+.sms-panel details { padding: 12px 0; border-bottom: 1px solid var(--theme-border); }
+.sms-panel summary { cursor: pointer; overflow-wrap: anywhere; }
+.sms-history-row { padding-block: 14px; border-top: 1px solid var(--theme-border); }
+.sms-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+.sms-simulation { color: var(--theme-accent); }
+@media (max-width: 600px) { .sms-actions button, .sms-confirm button { white-space: normal; width: 100%; } }
+/* Native radio semantics retain Tab / arrow-key / Space navigation. */
+.sms-panel .sms-audience-group { border: 0; padding: 0; }
+.sms-audience-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.sms-panel .sms-audience-card { display: flex; align-items: flex-start; gap: 12px; border: 2px solid var(--theme-border); border-radius: 10px; padding: 18px; background: var(--theme-surface); cursor: pointer; }
+.sms-audience-card input[type="radio"] { width: 18px; height: 18px; flex: 0 0 18px; margin: 4px 0 0; padding: 0; accent-color: var(--theme-primary); }
+.sms-audience-card.is-selected { border-color: var(--theme-primary); background: var(--theme-soft); box-shadow: inset 0 0 0 1px var(--theme-primary); }
+.sms-audience-card:focus-within { outline: 3px solid var(--theme-focus); outline-offset: 3px; }
+.sms-audience-icon { color: var(--theme-accent); font-size: 22px; }
+.sms-audience-copy { display: grid; gap: 6px; min-width: 0; }
+.sms-audience-copy > span { color: var(--theme-muted); font-size: 12px; }
+.sms-customer-results { display: grid; list-style: none; margin: 12px 0; padding: 0; gap: 10px; }
+.sms-customer-result { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 16px; text-align: left; padding: 14px; border: 1px solid var(--theme-border); border-radius: 8px; background: var(--theme-surface); color: var(--theme-text); }
+.sms-customer-result:hover:not(:disabled), .sms-customer-result.is-selected { border-color: var(--theme-primary); background: var(--theme-soft); }
+.sms-customer-result:disabled { opacity: 1; cursor: not-allowed; border-style: dashed; }
+.sms-result-identity, .sms-selected-customer { display: grid; gap: 5px; overflow-wrap: anywhere; }
+.sms-result-identity > span, .sms-result-eligibility { color: var(--theme-muted); font-size: 12px; }
+.sms-selected-customer { padding: 16px; border: 2px solid var(--theme-primary); background: var(--theme-soft); border-radius: 8px; }
+.sms-panel #sms-customer-query { margin-top: 0; }
+@media (max-width: 600px) {
+  .sms-audience-cards { grid-template-columns: 1fr; }
+  .sms-panel .sms-audience-card { padding: 14px; }
+  .sms-customer-result { align-items: flex-start; flex-direction: column; gap: 8px; }
+}
+/* Preview is presentation-only: all totals/content come from the server snapshot. */
+.sms-preview { padding-top: 24px; border-top: 1px solid var(--theme-border); }
+.sms-preview-conversation { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(0, 1.5fr); gap: 24px; align-items: start; margin-top: 22px; }
+.sms-preview-selector { display: grid; gap: 8px; min-width: 0; }
+.sms-preview-selector select { min-width: 0; }
+.sms-preview-device { background: var(--theme-background); border: 1px solid var(--theme-border); border-radius: 18px; padding: 20px; min-width: 0; }
+.sms-preview-sender { display: grid; gap: 4px; text-align: center; border-bottom: 1px solid var(--theme-border); padding-bottom: 16px; margin-bottom: 18px; overflow-wrap: anywhere; }
+.sms-preview-sender > span, .sms-preview-to { color: var(--theme-muted); font-size: 12px; }
+.sms-message-bubble { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--theme-soft); color: var(--theme-text); border: 1px solid var(--theme-primary); border-inline-start: 4px solid var(--theme-primary); border-radius: 14px 14px 14px 4px; padding: 18px; line-height: 1.7; }
+.sms-preview-empty { padding: 24px; border: 1px dashed var(--theme-border); border-radius: 10px; }
+.sms-send-confirm { padding: 22px; border: 1px solid var(--theme-border); border-radius: 12px; background: var(--theme-soft); gap: 16px; }
+.sms-send-confirm h3, .sms-panel .sms-send-confirm p { margin: 0; }
+.sms-panel .sms-send-confirm label { display: flex; align-items: flex-start; gap: 10px; line-height: 1.6; }
+.sms-send-confirm input[type="checkbox"] { margin: 3px 0 0; }
+.sms-send-confirm .primary { justify-self: start; }
+@media (max-width: 760px) { .sms-preview-conversation { grid-template-columns: 1fr; gap: 18px; } }
+@media (max-width: 480px) {
+  .sms-preview-device, .sms-send-confirm { padding: 16px; }
+  .sms-send-confirm .primary { width: 100%; white-space: normal; }
+}
+/* Simple compose → confirm → result workflow; implementation details stay hidden. */
+.sms-compose-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 22px; }
+.sms-result { display: grid; gap: 18px; }
+.sms-history-section > summary { font-size: 16px; font-weight: 650; cursor: pointer; }
+.sms-history-content { padding-top: 18px; }
+.sms-preview-conversation:has(> .sms-preview-device:only-child) { grid-template-columns: minmax(0, 1fr); max-width: 560px; }
+@media (max-width: 600px) { .sms-compose-actions { flex-direction: column; } .sms-compose-actions button { width: 100%; white-space: normal; } }

@@ -132,12 +132,13 @@ class QRAPITests(unittest.TestCase):
         code, link = self.call('POST', self.prefix + '/link', {})
         self.assertEqual(code, 200)
         self.assertEqual(self.call('POST', self.prefix + '/regenerate', {'expected_qr_token': link['qr_token'], 'confirmed': True})[0], 403)
-        self.assertEqual(self.call('POST', self.prefix + '/send', {})[0], 501)
+        self.assertEqual(self.call('POST', self.prefix + '/send', {})[0], 403)
         self.assertEqual(self.call('POST', self.prefix + '/link', {}, token=None)[0], 401)
         self.assertEqual(self.call('GET', self.prefix + '/image', token=None)[0], 401)
     def test_owner_manager_regenerate_confirmation_and_business_scope(self):
         for role in [Role.OWNER, Role.MANAGER]:
             self.verifier.verify.return_value = UserContext('trusted-sub', None, 'tenant-a', (), role)
+            self.assertEqual(self.call('POST', self.prefix + '/send', {})[0], 501)
             _, link = self.call('POST', self.prefix + '/link', {})
             body = {'expected_qr_token': link['qr_token'], 'confirmed': False}
             self.assertEqual(self.call('POST', self.prefix + '/regenerate', body)[0], 422)

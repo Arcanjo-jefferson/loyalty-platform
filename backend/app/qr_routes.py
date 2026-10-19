@@ -46,7 +46,7 @@ def regenerate(customer_id: str, data: RegenerateInput, user: User, management: 
 
 
 @router.post('/customers/{customer_id}/qr/send')
-def send(customer_id: str, data: EmptyInput, user: User, service: Service):
+def send(customer_id: str, data: EmptyInput, user: User, management: Management, service: Service):
     service.customers.get(user.business_id, customer_id)
     raise HTTPException(501, 'SMS sending is not configured yet. Use Copy QR Link.')
 

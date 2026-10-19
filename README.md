@@ -2,7 +2,7 @@
 
 A local MVP for a future multi-business customer loyalty and SMS marketing platform. The project is designed to give managers a customer directory and, tools for recording visits and, in later milestones, issuing rewards and communicating with customers who have opted into marketing.
 
-**Current status: Milestones 1–3 completed and manually verified against AWS by the project owner; Milestone 4 profile-photo storage/retrieval manually verified; Milestone 5A complete; Milestone 5B voucher engine implemented; Milestone 5B.1 QR management implemented; Milestone 5C Daily Raffle implemented; Milestone 5D.1 durable print queue and ticket generation implemented, awaiting live acceptance; Milestone 5D.2A Windows development agent implemented, awaiting production device provisioning and onsite printer acceptance; Milestone 5D.3 secure authentication/connectivity integration implemented with provisioning pending.** The application runs locally with a React manager dashboard and a FastAPI customer API. Customer persistence is configurable between DynamoDB and an optional in-memory repository. Cognito business-user login and server-side role/tenant authorization are implemented. Private customer images, camera capture and ID verification are implemented. QR lookup, explicit visit confirmation and loyalty progress are implemented. Automatic €10 loyalty/€20 birthday vouchers, redemption and atomic Daily Raffle entries are implemented; SMS sending remains planned. DynamoDB persistence was manually verified by the project owner.
+**Current status: Milestones 1–3 completed and manually verified against AWS by the project owner; Milestone 4 profile-photo storage/retrieval manually verified; Milestone 5A complete; Milestone 5B voucher engine implemented; Milestone 5B.1 QR management implemented; Milestone 5C Daily Raffle implemented; Milestone 5D.1 durable print queue and ticket generation implemented, awaiting live acceptance; Milestone 5D.2A Windows agent implemented, with successful on-site Epson printing reported by the project owner; production device provisioning remains a separate acceptance scope; Milestone 5D.3 secure authentication/connectivity integration implemented with provisioning pending.** The application runs locally with a React manager dashboard and a FastAPI customer API. Customer persistence is configurable between DynamoDB and an optional in-memory repository. Cognito business-user login and server-side role/tenant authorization are implemented. Private customer images, camera capture and ID verification are implemented. QR lookup, explicit visit confirmation and loyalty progress are implemented. Automatic €10 loyalty/€20 birthday vouchers, redemption and atomic Daily Raffle entries are implemented; Owner/Manager SMS preview, outbox and delivery simulation are implemented; real Twilio sending remains disabled. DynamoDB persistence was manually verified by the project owner.
 
 ## Implemented features
 
@@ -13,7 +13,7 @@ A local MVP for a future multi-business customer loyalty and SMS marketing platf
 - Irish mobile input with a visible Ireland `+353` indicator. National and international formats are normalized to E.164 by the backend before storage and per-business duplicate checks. Incomplete or malformed numbers are rejected. Validation checks format, not phone ownership or service availability.
 - Minimum age of 18 enforced in frontend and backend using the full birth date and the current date in `Europe/Dublin`. Invalid and future dates are rejected. February 29 birthdays reach the age threshold on March 1 in non-leap years.
 - Explicit promotional/marketing SMS consent, with a UTC timestamp for the most recent consent transition.
-- Secure UUID4 customer IDs and separate random, opaque `qr_token` values containing no personal data. Keyboard scanner lookup and confirmed visit tracking are implemented; QR rendering, customer-facing links and protected regeneration are implemented; digital print queuing/ticket generation is implemented; Windows development printing adapter is implemented; production printing and onsite acceptance remain pending.
+- Secure UUID4 customer IDs and separate random, opaque `qr_token` values containing no personal data. Keyboard scanner lookup and confirmed visit tracking are implemented; QR rendering, customer-facing links and protected regeneration are implemented; digital print queuing/ticket generation is implemented; Windows development printing adapter is implemented; on-site Epson output is confirmed by the project owner, while production device deployment remains a separate acceptance scope.
 - Server-managed UTC creation/update timestamps and active/inactive customer status.
 - Successful registration and updates automatically open the customer's profile using the saved API response immediately. Reusable accessible notifications display `Customer registered successfully.` or `Customer details updated successfully.`
 - Failed submissions remain on the form, preserve entered values and show an error without success feedback.
@@ -143,7 +143,7 @@ The verified user context contains subject, optional email, business, groups and
 | Manager | Create, list/search, view, edit and change active/inactive status | `require_management` for Owner/Manager, including sensitive documents |
 | Staff | Create active customers, list/search, view and edit details; cannot change status | `require_customer_access` for all three roles |
 
-The full finalized role model remains in `PROJECT_CONTEXT.md`. Guards for future sensitive operations are available; document endpoints are now implemented; staff-management, SMS and report endpoints remain planned. Hiding UI controls is supplementary; the backend is authoritative. Staff edit auditing remains a future requirement, not an implemented audit log.
+The full finalized role model remains in `PROJECT_CONTEXT.md`. Guards for future sensitive operations are available; document endpoints are now implemented; staff-management and report endpoints remain planned; Owner/Manager SMS simulation endpoints are implemented below. Hiding UI controls is supplementary; the backend is authoritative. Staff edit auditing remains a future requirement, not an implemented audit log.
 
 Amplify refreshes expired tokens when a refresh token is available ([session documentation](https://docs.amplify.aws/react/frontend/auth/manage-user-sessions/)). On a 401, the frontend attempts one forced refresh; another 401 or refresh failure clears the authenticated view and asks for sign-in. A 403 stays an authorization error. Logout clears the SDK's local session and unmounts customer data. A valid copied JWT remains verifiable until expiry: local signature verification does not check server-side revocation on every request. Role/business changes also take effect as new tokens are issued; use short token lifetimes and reauthentication as appropriate.
 
@@ -346,13 +346,18 @@ Live Cognito acceptance has not been performed by the automated tests; no real u
 
 ## Planned development roadmap
 
-Milestone 2 persistence has been manually verified by the project owner. Milestone 3 Cognito integration and current customer authorization are manually verified. Milestone 4 profile-photo storage/retrieval is manually verified. Milestone 5A QR lookup and visit tracking is complete. Milestone 5B automatic vouchers, Milestone 5B.1 customer QR management and Milestone 5C Daily Raffle entries are implemented; live acceptance of the new raffle workflow is pending. The following later milestones are **not implemented**, following `PROJECT_CONTEXT.md`:
+Milestone 2 persistence has been manually verified by the project owner. Milestone 3 Cognito integration and current customer authorization are manually verified. Milestone 4 profile-photo storage/retrieval is manually verified. Milestone 5A QR lookup and visit tracking is complete. Milestone 5B automatic vouchers, Milestone 5B.1 customer QR management and Milestone 5C Daily Raffle entries are implemented; live acceptance of the new raffle workflow is pending. The Windows Print Agent, Epson transport and secure device integration are implemented
+in Milestones 5D.2A/5D.3 below; listing them as unimplemented was outdated. The project
+owner has confirmed successful on-site Epson TM-m30III receipt printing. This does
+not independently verify every production device-provisioning/security step.
+Earlier milestone acceptance notes below describe the status when those stages
+were delivered. See the dated current-status review in `PROJECT_CONTEXT.md`.
+The following work remains **not implemented**:
 
-- **Milestone 5D.2:** Windows Print Agent, printer transport and physical Epson printing.
-- **Milestone 7:** Twilio messaging, consent-aware campaigns and scheduled birthday promotions.
+- **Milestone 5 — SMS Messaging (previous roadmap label: Milestone 7):** individual/bulk campaign simulation is implemented. Real Twilio sending, automated opt-outs, delivery callbacks, birthday scheduling and voucher SMS notifications remain pending.
 - **Milestone 8:** audit/security/privacy hardening and production deployment, including future Lambda/API Gateway and hosting infrastructure.
 
-Exact boundaries may evolve. No raffle winner selection, physical printing, Twilio, scheduled birthday SMS automation or Lambda deployment is included in the current implementation.
+Exact boundaries may evolve. No raffle winner selection, Twilio sending, scheduled birthday SMS automation or Lambda deployment is included in the current implementation.
 
 ### Retrying a temporary-password sign-in
 
@@ -1348,3 +1353,104 @@ Windows timezone dependency are described in the Print Agent README.
 
 Ticket time correction: new version 3 snapshots include actual original minutes (HH:mm).
 Existing immutable version 1/2 snapshots remain supported without rewriting history.
+
+
+## Owner/Manager SMS Messaging — simulation only
+
+Open **SMS Messaging** (`#/sms`) as Owner or Manager. Staff has no navigation,
+page access or API permission. This feature never calls Twilio or sends a real SMS.
+No credentials or new dependency are required. Voucher issuance, visits, raffles,
+authentication and the working Epson integration are unchanged.
+
+1. Select one customer or all eligible customers, and write your message. The bubble
+   shows a local personalised example; bulk examples are explicitly fictional.
+2. Click **Send message** to review the server's actual eligible count, estimated
+   total EUR cost and final personalised preview. No message is queued yet.
+3. Choose **Yes, confirm send** or **Go back**. Only Yes confirms the stored draft
+   and atomically reserves budget. Cancel in Compose clears the message without
+   confirmation. Eligibility and budget are rechecked by the backend.
+4. The backend worker processes confirmed messages automatically in simulation.
+   The result distinguishes queued from simulation complete; no real SMS is sent.
+   Unknown outcomes need review and are never automatically resent.
+5. Use **Start a new message** when finished. Message history is a separate collapsed
+   section with readable statuses and masked phones. A failed confirmation keeps
+   its idempotency key for an explicit safe retry; check history before deliberately
+   creating a new message after a network failure.
+
+The user page has no manual queue-processing, refresh-budget or encoding/segment
+controls. Pricing remains illustrative, not a Twilio tariff. Full technical state,
+creator and consent decisions remain in protected backend records. Existing opt-outs
+remain enforced; the suppression API still exists but is not a compose-page control.
+
+Use fictional customers in memory mode for fully offline application testing.
+The existing real app login still uses Cognito; automated tests inject local
+verifiers. In-memory outbox/budgets disappear on restart. DynamoDB mode persists
+three new internal types in the existing business partition: SMS_CAMPAIGN,
+SMS_BUDGET and SMS_SUPPRESSION. No table/index/resource is created automatically.
+Campaigns contain up to 200 recipients as a bounded outbox aggregate. Confirmation
+and budget reservation are one conditional transaction; each dispatch uses a
+conditional submission fence and fresh eligibility checks. History retains
+creator, destination/content snapshot, consent decision, status and timestamps.
+Internal SMS records never appear in customer directory responses.
+
+### Simulation settings and budget
+
+Optional backend-only configuration, copied from `backend/.env.example`:
+
+```dotenv
+SMS_BUSINESS_SETTINGS_JSON={"trumps":{"sender":"TRUMPS PLAZA (simulation)","segment_price_micros":100000,"monthly_limit_micros":20000000,"provider":"simulation"}}
+```
+
+Money uses integer EUR micros: 100000 means EUR 0.10 per segment, 20000000 means
+EUR 20. Defaults use those illustrative amounts and a neutral simulation sender;
+they are not Twilio pricing. The UI labels them as estimates. The backend rejects
+any provider other than simulation. No Twilio secrets belong in frontend variables.
+A zero monthly cap prevents new queue confirmations. Only backend configuration
+controls sender/rate/limits; no Manager settings endpoint exists.
+
+Budgets use Europe/Dublin calendar months, with DST. Reserved estimates remain
+counted even for failed/suppressed/unknown simulation outcomes (conservative cap;
+no actual charge). Queued work from a previous month becomes SUPPRESSED rather
+than spending an old reservation in a new month. The GSM-7 estimate accounts for
+extension characters such as Euro; Unicode uses UTF-16 units and different limits.
+Personalisation may change segment counts, so final estimates come from the server.
+
+### APIs and optional worker
+
+Owner/Manager-only: GET `/sms/settings`, POST `/sms/preview`, POST
+`/sms/campaigns/{UUID}/confirm`, GET `/sms/history`, POST `/sms/simulate`, and
+POST `/sms/customers/{UUID}/suppress`. Scope always comes from verified Cognito;
+bodies forbid business/creator/price overrides. Preview includes audience/message;
+confirmation and suppression require `{ "confirmed": true }`. Simulation uses `{}`.
+The separate QR-send placeholder remains 501 for Owner/Manager and now denies Staff.
+
+The FastAPI lifecycle starts a simulation-only background worker. It registers only
+verified business scopes from confirmations/history/status requests, plus optional
+server-owned `SMS_WORKER_BUSINESSES=trumps` configuration. Set that variable for
+unattended recovery of confirmed campaigns after restart. Without it, recovery
+resumes when an authorized user reads history/status or confirms for that business.
+There is no table Scan or automatic discovery of unrelated tenant data.
+`GET /sms/campaigns/{UUID}` is an Owner/Manager-only, scoped status read used by
+result polling. Real delivery remains disabled, and the worker refuses any provider
+other than the simulator. It reuses the durable outbox and existing dispatch guards.
+Keep Uvicorn lifespan enabled and the backend running for automatic processing.
+The standalone `scripts/run_sms_worker.py` remains optional operator tooling; users
+never need to run it or press a queue-processing button. Restart FastAPI and reload
+Vite after updating to this workflow.
+
+Safe pre-submit failures retry at most three times, delayed 30 seconds. A provider
+timeout, unexpected result, or abandoned SUBMITTING fence becomes UNKNOWN and
+is never automatically resent. No SMS body, recipient or exception text is logged.
+Callbacks, real opt-outs, sender registration, verified consent/re-consent policies,
+pricing/fees, retention, rate limits and operational hardening are prerequisites
+for future Twilio activation. Birthday automation and voucher SMS notifications
+remain future work; they are not introduced by manual campaign simulation.
+
+### Validation
+
+Backend full suite: 342 tests plus 86 subtests passed. Frontend: 156 tests passed,
+lint and production build passed. Print Agent regression: 33 tests passed.
+Tests use local fixtures and fake DynamoDB/providers; no real AWS, messages or
+printer jobs. `backend/tests/test_sms.py` covers both repository modes, eligibility,
+encoding, budget/duplicate races, uncertain/retry states, 200-recipient campaigns,
+month boundaries, history, role guards and cross-business denial.

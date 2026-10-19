@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { customerRequest } from './api'
 import { useAuth } from './AuthContext'
+import SMSMessaging from './components/SMSMessaging'
 import PrintJobs from './components/PrintJobs'
 import PrintDevices from './components/PrintDevices'
 import VisitScanner from './components/VisitScanner'
@@ -17,7 +18,7 @@ import './App.css'
 
 function readRoute() {
   const path = window.location.hash.slice(1) || '/'
-  return path === '/print-devices' ? { page: 'print-devices' } : path === '/print-queue' ? { page: 'print-queue' } : path === '/vouchers' ? { page: 'vouchers' } : path === '/loyalty' ? { page: 'loyalty' } : path === '/customers/new' ? { page: 'new' } : path.startsWith('/customers/') ? { page: path.endsWith('/edit') ? 'edit' : 'detail', id: path.split('/')[2] } : { page: path === '/customers' ? 'customers' : 'dashboard' }
+  return path === '/sms' ? { page: 'sms' } : path === '/print-devices' ? { page: 'print-devices' } : path === '/print-queue' ? { page: 'print-queue' } : path === '/vouchers' ? { page: 'vouchers' } : path === '/loyalty' ? { page: 'loyalty' } : path === '/customers/new' ? { page: 'new' } : path.startsWith('/customers/') ? { page: path.endsWith('/edit') ? 'edit' : 'detail', id: path.split('/')[2] } : { page: path === '/customers' ? 'customers' : 'dashboard' }
 }
 export default function App() {
   const { user, logout } = useAuth()
@@ -27,7 +28,7 @@ export default function App() {
   const [route, setRoute] = useState(readRoute)
   const [customers, setCustomers] = useState([])
   const [customer, setCustomer] = useState(null)
-  const [loading, setLoading] = useState(() => !['loyalty', 'vouchers', 'print-queue', 'print-devices'].includes(readRoute().page))
+  const [loading, setLoading] = useState(() => !['loyalty', 'vouchers', 'print-queue', 'print-devices', 'sms'].includes(readRoute().page))
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [notice, setNotice] = useState('')
@@ -40,7 +41,7 @@ export default function App() {
       const showSaved = next.page === 'detail' && next.id === saved?.customer.customer_id
       // Render the canonical POST/PUT response immediately, without a stale follow-up fetch.
       setCustomer(showSaved ? saved.customer : null)
-      setLoading(!showSaved && !['loyalty', 'vouchers', 'print-queue', 'print-devices'].includes(next.page))
+      setLoading(!showSaved && !['loyalty', 'vouchers', 'print-queue', 'print-devices', 'sms'].includes(next.page))
       setError('')
       setNotice(showSaved ? saved.message : '')
       setRoute(showSaved ? { ...next, savedCustomer: saved.customer } : next)
@@ -50,7 +51,7 @@ export default function App() {
     return () => window.removeEventListener('hashchange', change)
   }, [])
   useEffect(() => {
-    if (['loyalty', 'vouchers', 'print-queue', 'print-devices'].includes(route.page)) return
+    if (['loyalty', 'vouchers', 'print-queue', 'print-devices', 'sms'].includes(route.page)) return
     if (route.savedCustomer) return
     let active = true
     const request = ['detail', 'edit'].includes(route.page) ? customerRequest(`/${encodeURIComponent(route.id)}`) : customerRequest()
@@ -73,13 +74,14 @@ export default function App() {
   }
   const filtered = searchCustomers(customers, search)
   const birthdays = customers.filter(c => Number(c.date_of_birth.slice(5, 7)) === today.getMonth() + 1).length
-  const titles = { dashboard: 'Dashboard', customers: 'Customers', new: 'Add customer', detail: 'Customer details', edit: 'Edit customer', loyalty: 'Loyalty visits', vouchers: 'Vouchers', 'print-queue': 'Print queue', 'print-devices': 'Print devices' }
+  const titles = { dashboard: 'Dashboard', customers: 'Customers', new: 'Add customer', detail: 'Customer details', edit: 'Edit customer', loyalty: 'Loyalty visits', vouchers: 'Vouchers', 'print-queue': 'Print queue', 'print-devices': 'Print devices', sms: 'SMS Messaging' }
   return <div className="app-shell" style={brandingVariables(branding)}>
-    <aside className="sidebar"><a className="brand" href="#/"><BrandIdentity key={businessId} branding={branding} /></a><div className="workspace"><span className="workspace-icon">{businessId[0].toUpperCase()}</span><div><strong>{branding.name}</strong><small>{user.role.toLowerCase()} workspace</small></div></div><div className="nav-label">WORKSPACE</div><nav aria-label="Main navigation">{[['dashboard', '/', '◫', 'Dashboard'], ['customers', '/customers', '♙', 'Customers'], ['loyalty', '/loyalty', '◇', 'Loyalty visits'], ['vouchers', '/vouchers', '▤', 'Vouchers'], ...(['OWNER', 'MANAGER'].includes(user.role) ? [['print-queue', '/print-queue', '▤', 'Print queue']] : []), ...(user.role === 'OWNER' ? [['print-devices', '/print-devices', '▤', 'Print devices']] : [])].map(([page, path, icon, label]) => <a key={page} href={`#${path}`} className={route.page === page || page === 'customers' && ['new', 'detail', 'edit'].includes(route.page) ? 'selected' : ''}><span aria-hidden="true">{icon}</span>{label}</a>)}{['Messaging', 'Settings'].map(label => <button disabled key={label}><span aria-hidden="true">○</span>{label}<small>Soon</small></button>)}</nav><div className="sidebar-foot"><span className="local-dot" /> Local development<small>Customer workspace · Milestone 5D.1</small></div></aside>
-    <div className="main-shell"><header className="topbar"><div className="header-brand"><BrandIdentity key={businessId} branding={branding} compact /><span>Workspace <span className="divider">/</span> {titles[route.page]}</span></div><div className="session-controls"><span className="welcome">Welcome, {user.firstName || 'Team member'}</span><span className="environment">{user.role}</span><button type="button" className="secondary" onClick={logout}>Sign out</button></div></header><main><div className="page-heading"><div><div className="eyebrow">YOUR CUSTOMER COMMUNITY</div><h1>{titles[route.page]}</h1><p>{route.page === 'dashboard' ? 'A clear view of the people behind your business.' : route.page === 'customers' ? 'Manage your contacts and their marketing preferences.' : route.page === 'loyalty' ? 'Find a customer by QR, name or phone, then confirm their visit.' : route.page === 'print-devices' ? 'Manage registered print devices for your business.' : route.page === 'print-queue' ? 'Review queued tickets and authorize explicit reprints.' : route.page === 'vouchers' ? 'Look up a voucher code and redeem a valid reward.' : 'Personal details, contact information and SMS preferences.'}</p></div>{['dashboard', 'customers'].includes(route.page) && <button className="primary" onClick={() => navigate('/customers/new')}>＋ Add customer</button>}</div>
+    <aside className="sidebar"><a className="brand" href="#/"><BrandIdentity key={businessId} branding={branding} /></a><div className="workspace"><span className="workspace-icon">{businessId[0].toUpperCase()}</span><div><strong>{branding.name}</strong><small>{user.role.toLowerCase()} workspace</small></div></div><div className="nav-label">WORKSPACE</div><nav aria-label="Main navigation">{[['dashboard', '/', '◫', 'Dashboard'], ['customers', '/customers', '♙', 'Customers'], ['loyalty', '/loyalty', '◇', 'Loyalty visits'], ['vouchers', '/vouchers', '▤', 'Vouchers'], ...(['OWNER', 'MANAGER'].includes(user.role) ? [['print-queue', '/print-queue', '▤', 'Print queue'], ['sms', '/sms', '✉', 'SMS Messaging']] : []), ...(user.role === 'OWNER' ? [['print-devices', '/print-devices', '▤', 'Print devices']] : [])].map(([page, path, icon, label]) => <a key={page} href={`#${path}`} className={route.page === page || page === 'customers' && ['new', 'detail', 'edit'].includes(route.page) ? 'selected' : ''}><span aria-hidden="true">{icon}</span>{label}</a>)}{['Settings'].map(label => <button disabled key={label}><span aria-hidden="true">○</span>{label}<small>Soon</small></button>)}</nav><div className="sidebar-foot"><span className="local-dot" /> Local development<small>Customer workspace · Milestone 5D.1</small></div></aside>
+    <div className="main-shell"><header className="topbar"><div className="header-brand"><BrandIdentity key={businessId} branding={branding} compact /><span>Workspace <span className="divider">/</span> {titles[route.page]}</span></div><div className="session-controls"><span className="welcome">Welcome, {user.firstName || 'Team member'}</span><span className="environment">{user.role}</span><button type="button" className="secondary" onClick={logout}>Sign out</button></div></header><main><div className="page-heading"><div><div className="eyebrow">YOUR CUSTOMER COMMUNITY</div><h1>{titles[route.page]}</h1><p>{route.page === 'dashboard' ? 'A clear view of the people behind your business.' : route.page === 'customers' ? 'Manage your contacts and their marketing preferences.' : route.page === 'loyalty' ? 'Find a customer by QR, name or phone, then confirm their visit.' : route.page === 'print-devices' ? 'Manage registered print devices for your business.' : route.page === 'print-queue' ? 'Review queued tickets and authorize explicit reprints.' : route.page === 'sms' ? 'Compose consent-aware messages and review simulated delivery.' : route.page === 'vouchers' ? 'Look up a voucher code and redeem a valid reward.' : 'Personal details, contact information and SMS preferences.'}</p></div>{['dashboard', 'customers'].includes(route.page) && <button className="primary" onClick={() => navigate('/customers/new')}>＋ Add customer</button>}</div>
       <div className="local-note">Development workspace · Use fictional customer data only.</div>
       <Notification message={notice} onDismiss={() => setNotice('')} />
       {loading ? <div className="panel empty" role="status">Loading customer information…</div> : error ? <div className="panel empty"><p role="alert">{error}</p><button className="secondary" onClick={() => { setLoading(true); setError(''); setRetry(retry + 1) }}>Try again</button></div> : <>
+        {route.page === 'sms' && <SMSMessaging />}
         {route.page === 'loyalty' && <VisitScanner />}
         {route.page === 'print-queue' && <PrintJobs />}
         {route.page === 'print-devices' && <PrintDevices />}

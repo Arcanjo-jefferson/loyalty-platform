@@ -1,6 +1,12 @@
+from contextlib import asynccontextmanager
+import os
+from starlette.concurrency import run_in_threadpool
+from app.sms_worker import SMSWorker
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from app.sms_routes import router as sms_router
+from app.sms_service import SMSService
 from app.print_routes import router as print_router
 from app.print_device_routes import router as device_router
 from app.secure_print_routes import router as secure_print_router
@@ -29,8 +35,17 @@ from app.auth import CognitoVerifier
 from app.service import CustomerNotFound, CustomerService
 
 
+@asynccontextmanager
+async def lifespan(app):
+    app.state.sms_worker.start()
+    try:
+        yield
+    finally:
+        await run_in_threadpool(app.state.sms_worker.stop)
+
+
 def create_app(repository=None, token_verifier=None, media_storage=None, agent_verifier=None):
-    app = FastAPI(title='Loyalty Platform API', version='0.7.0')
+    app = FastAPI(title='Loyalty Platform API', version='0.7.0', lifespan=lifespan)
     app.state.customer_service = CustomerService(repository if repository is not None else build_repository(Settings.from_environment()))
     app.add_middleware(CORSMiddleware, allow_origins=['http://localhost:5173', 'http://127.0.0.1:5173'], allow_methods=['GET', 'POST', 'PUT', 'PATCH'], allow_headers=['Content-Type', 'Authorization'])
     app.state.token_verifier = token_verifier if token_verifier is not None else CognitoVerifier.from_environment()
@@ -43,6 +58,9 @@ def create_app(repository=None, token_verifier=None, media_storage=None, agent_v
     app.state.qr_service = QRService(app.state.customer_service)
     app.state.raffle_service = RaffleService(app.state.customer_service)
     app.state.print_service = PrintService(app.state.customer_service)
+    app.state.sms_service = SMSService(app.state.customer_service)
+    app.state.sms_worker = SMSWorker(app.state.sms_service, [b.strip() for b in os.getenv('SMS_WORKER_BUSINESSES', '').split(',') if b.strip()])
+    app.include_router(sms_router)
     app.include_router(print_router)
     app.state.device_registry = DeviceRegistry(app.state.print_service.repository)
     app.state.agent_verifier = agent_verifier if agent_verifier is not None else AgentVerifier.from_environment()
