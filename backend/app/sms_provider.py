@@ -13,6 +13,9 @@ class DisabledProvider:
     def send(self, request: SendRequest) -> Delivery:
         raise ProviderUnavailable('Real SMS delivery is unavailable in this release.')
 
+    def verify_incoming(self, *, body, headers, url):
+        raise ProviderUnavailable('SMS webhooks are not implemented.')
+
     def verify_delivery(self, *, body, headers, url):
         raise ProviderUnavailable('SMS webhooks are not implemented.')
 

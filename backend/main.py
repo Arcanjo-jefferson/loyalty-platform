@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 import os
 from starlette.concurrency import run_in_threadpool
 from app.sms_worker import SMSWorker
+from app.sms_events import SMSEvents
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -59,6 +60,7 @@ def create_app(repository=None, token_verifier=None, media_storage=None, agent_v
     app.state.raffle_service = RaffleService(app.state.customer_service)
     app.state.print_service = PrintService(app.state.customer_service)
     app.state.sms_service = SMSService(app.state.customer_service)
+    app.state.sms_events = SMSEvents(app.state.sms_service)  # Internal only; no webhook routes.
     app.state.sms_worker = SMSWorker(app.state.sms_service, [b.strip() for b in os.getenv('SMS_WORKER_BUSINESSES', '').split(',') if b.strip()])
     app.include_router(sms_router)
     app.include_router(print_router)

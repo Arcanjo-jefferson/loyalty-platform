@@ -1639,3 +1639,119 @@ validation, permanent failure and uncertain-outcome handling. Tests used only
 local fixtures/fakes; no real messages, provider API, AWS resources or printer
 output were used. Restart FastAPI/any standalone worker to load this backend
 change. No frontend changes or mandatory migration are required.
+
+
+## Milestone 5.2 — Internal SMS opt-out and delivery processing
+
+Implemented on `feature/sms-optout-delivery`, based on clean provider integration
+commit `01014a4`. This supersedes the earlier statement that event processing is
+interfaces only. **Live provider integration remains unavailable.** There are no
+public webhook routes, real signature verifiers, provider HTTP calls or SMS replies.
+No AWS resources, mandatory migration, consent rules, reward/visit/raffle/printing
+rules or customer registration behaviour changed.
+
+### Implemented internal boundary
+
+`SMSEvents.receive` accepts original request bytes and invokes a server-selected
+adapter before any database access. It requires a correctly typed verified event,
+matching provider, valid binding and aware timestamp; malformed, oversized,
+unauthenticated and future-dated events fail closed with safe errors. There is no
+request-controlled verifier, tenant field or `verified=true` bypass. Real Twilio
+and ClickSend adapter verification methods still refuse all input. Automated tests
+inject an offline verifier double; it is not a real or invented signature scheme.
+FastAPI owns this service in application state, with no corresponding HTTP route.
+
+Optional backend `SMS_EVENT_BINDINGS_JSON` is a list (default `[]`), with each entry
+containing `provider` (twilio/clicksend), `account_id`, `receiving_number` (canonical
+E.164), and `business_id`. A provider/account/receiving-number tuple must resolve
+uniquely; duplicate/ambiguous configuration is rejected. Payload business IDs are
+forbidden. Provider account and destination must come from the verified event,
+and the server binding supplies the tenant. The binding identity hashes the
+provider/account/receiving-number tuple and must match the campaign snapshot.
+Do not reassign a previously used tuple to another business without a separately
+reviewed routing-history/replay policy; current configuration is static per process.
+No live events are accepted by the disabled production adapters regardless.
+
+### Opt-outs and durable storage
+
+- Match the entire trimmed message case-insensitively against STOP, UNSUBSCRIBE,
+  CANCEL, END or QUIT. Other content is recorded as ignored, without storing body.
+- Normalize the sender with the existing Irish mobile rules and suppress the
+  tenant/canonical-phone key. No customer lookup or active customer is required:
+  the phone identifies the suppression target even after deletion or re-registration.
+- Atomically write the event receipt and suppression, retaining previous suppression
+  evidence. Never turn consent on/off automatically, clear suppression, create a
+  customer, release budget or send any reply. Existing eligibility checks consult
+  this suppression immediately before submission; ordinary customer edits cannot
+  remove it. A message already submitted externally cannot be recalled.
+- `SMS_EVENT#<digest>` / SMS_EVENT stores provider/binding/kind-scoped event identity,
+  original event ID, payload fingerprint and received/occurred times. Duplicate
+  replay is a no-op; reuse with different normalized content is rejected.
+- `SMS_MESSAGE#<digest>` / SMS_MESSAGE stores trusted provider-message correlation
+  to the original campaign and recipient in the same business partition. Account
+  and receiving-number identity scope the lookup. No Scan or tenant discovery.
+- Existing `SMS_SUPPRESS#<phone digest>` records remain compatible and independent
+  of customer lifetime. No TTL or cleanup of opt-outs/event dedup records is added.
+  Hashes are pseudonymous, not anonymized; private-table protections still apply.
+
+Memory storage uses the shared repository lock; DynamoDB uses conditional
+transactions. Receipt plus suppression/status update is atomic. Delivery writes
+also condition-check the correlation revision. Failure cannot consume an event
+without its intended update; retries use the same event identity. Bounded CAS
+conflicts fail safely for later retry. New internal rows stay out of customer APIs.
+
+### Correlation and delivery history
+
+`register_message` is an internal trusted future-dispatch hook, not an endpoint or
+callback inference. It atomically binds one provider message ID to a submitted
+recipient and account-bound campaign; conflicting assignment is rejected. Real
+sending is disabled, so no live correlation is created automatically. Tests seed
+explicitly fictional submitted records. Future real dispatch must integrate this
+hook with verified provider acceptance and handle callback-before-correlation races.
+Uncorrelated events fail without consuming their event IDs, allowing a later retry.
+
+Delivery status is stored separately from the original submission/retry state.
+Verified callbacks may resolve an UNKNOWN outcome for history but cannot cause a
+resend, change budgets or turn simulation into actual delivery. ACCEPTED means
+queued/accepted, SENT means delivery unconfirmed, DELIVERED requires an explicit
+verified delivery event, FAILED/UNDELIVERED display Failed, and UNKNOWN displays
+Delivery unknown. Simulation complete and existing simulation history stay intact.
+The history interface and confirmation workflow are unchanged apart from readable
+status wording. No provider metadata or full phone is newly exposed in the UI.
+
+Transitions are monotonic: ACCEPTED → SENT → a terminal result; UNKNOWN may gain
+verified progress. Older event timestamps are ignored, nonterminal states cannot
+regress, and DELIVERED/FAILED/UNDELIVERED are first-terminal-wins. Conflicting late
+terminal events are deduplicated/recorded without overwriting that outcome. Equal
+timestamps permit forward transitions only. Ignored callbacks also get durable
+receipts. Manual reconciliation of conflicting provider evidence remains future
+work; the system never guesses or automatically resubmits uncertain messages.
+
+### Remaining integration requirements
+
+Twilio/ClickSend credentials alone do not activate this feature. Each real adapter
+needs separately approved implementation based on verified provider documentation:
+original-request signature validation, correct account/destination extraction,
+stable event IDs, externally reachable TLS ingress, abuse/rate controls, bounded
+provider retry/acknowledgement policy, correlation recovery and operational audits.
+Twilio-specific activation requires project-owner approval; an alternative provider
+requires its equivalent review. No real signature algorithm is invented here.
+Phone ownership/reassignment, shared-number routing history, consent audits and
+retention policies still require review before live operation. Birthday SMS and
+voucher notifications remain pending; existing voucher issuance is untouched.
+Simulation stays the default. `SMS_REAL_DELIVERY_ENABLED=true` still blocks sending
+and cannot enable either real provider. No opt-out acknowledgement SMS is sent.
+
+Validation: full backend suite **413 tests + 86 subtests passed**; frontend **158
+passed**; Print Agent **33 passed**; frontend lint/build, Python compilation and
+`git diff --check` passed. New event tests cover both memory and fake DynamoDB,
+all opt-out keywords, exact matching, deletion/re-registration, consent edits,
+invalid authentication/validation, disabled live adapters, missing/ambiguous tenant
+bindings, correlation, deduplication, out-of-order/terminal events, concurrent
+processing and transaction rollback. API tests confirm there are no public webhook
+routes. Frontend tests verify readable labels and unchanged masked simulation
+history. An old queued-label assertion was updated from Waiting to Queued.
+No real provider signatures, live callbacks, AWS data or physical printer output
+were used or verified. Restart FastAPI to load the internal service; reload Vite
+for status wording. No mandatory backfill or provider credentials are required
+for offline tests. No commit, push or merge was performed.

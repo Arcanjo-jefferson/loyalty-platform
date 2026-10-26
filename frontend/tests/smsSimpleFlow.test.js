@@ -78,7 +78,7 @@ test('result polling is read-only and distinguishes simulation from delivery', a
   assert.equal(calls.at(-1)[1].method, undefined)
   assert.match(flow.getSnapshot().notice, /Simulation completed successfully/)
   flow.reset(); assert.equal(flow.getSnapshot().result, null)
-  assert.match(smsStatusLabel('QUEUED'), /Waiting/)
+  assert.equal(smsStatusLabel('QUEUED'), 'Queued')
   assert.match(smsStatusLabel('SIMULATED'), /no real SMS/)
   assert.equal(smsStatusLabel('DELIVERED'), 'Delivered')
   assert.match(campaignOutcome({ recipients: [{ status: 'UNKNOWN' }] }).message, /will not be sent again automatically/)

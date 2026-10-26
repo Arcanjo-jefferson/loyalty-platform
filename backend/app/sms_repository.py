@@ -16,7 +16,7 @@ class SMSConflict(Exception): pass
 class SMSStore(Protocol):
     def get(self, business, key): ...
     def listing(self, business, prefix): ...
-    def commit(self, business, changes, customer=None, absent=None): ...
+    def commit(self, business, changes, customer=None, absent=None, checks=()): ...
 
 
 class SMSRepository:
@@ -59,7 +59,7 @@ class SMSRepository:
             if not page.get('LastEvaluatedKey'): return result
             params['ExclusiveStartKey'] = page['LastEvaluatedKey']
 
-    def commit(self, business, changes, customer=None, absent=None):
+    def commit(self, business, changes, customer=None, absent=None, checks=()):
         """changes=(previous-or-None, new item); optional dispatch eligibility fence."""
         values = []
         for previous, value in changes:
@@ -72,6 +72,9 @@ class SMSRepository:
                 for old, value in values:
                     current = self.records.get((business, value['customer_id']))
                     if (current or {}).get('revision') != (old or {}).get('revision'): raise SMSConflict()
+                for expected in checks:
+                    current = self.records.get((business, expected['customer_id']))
+                    if current is None or current.get('revision') != expected['revision']: raise SMSConflict()
                 if absent and (business, absent) in self.records: raise SMSConflict()
                 if customer:
                     current = self.repository.get(business, customer.customer_id)
@@ -86,6 +89,11 @@ class SMSRepository:
                        ExpressionAttributeNames={'#kind': 'item_type', '#revision': 'revision'} if previous else {'#pk': 'business_id'})
             if previous: put['ExpressionAttributeValues'] = repo._encode({':kind': previous['item_type'], ':revision': previous['revision']})
             actions.append({'Put': put})
+        for expected in checks:
+            actions.append({'ConditionCheck': dict(TableName=repo.table_name, Key=repo._key(business, expected['customer_id']),
+                ConditionExpression='#kind = :kind AND #revision = :revision',
+                ExpressionAttributeNames={'#kind': 'item_type', '#revision': 'revision'},
+                ExpressionAttributeValues=repo._encode({':kind': expected['item_type'], ':revision': expected['revision']}))})
         if customer:
             actions.append({'ConditionCheck': dict(TableName=repo.table_name, Key=repo._key(business, customer.customer_id),
                 ConditionExpression='#kind = :kind AND #revision = :revision',

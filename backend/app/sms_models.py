@@ -86,7 +86,7 @@ class SMSRecipientHistory(BaseModel):
     id: str
     name: str
     phone: str
-    status: Literal['DRAFT', 'QUEUED', 'SUBMITTING', 'RETRYABLE', 'SIMULATED', 'SUPPRESSED', 'FAILED', 'UNKNOWN']
+    status: Literal['DRAFT', 'QUEUED', 'SUBMITTING', 'RETRYABLE', 'SIMULATED', 'SUPPRESSED', 'FAILED', 'UNKNOWN', 'ACCEPTED', 'SENT', 'DELIVERED', 'UNDELIVERED']
     updated_at: str
     provider_id: str | None = None
     reason: str | None = None

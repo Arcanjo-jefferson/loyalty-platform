@@ -2,11 +2,11 @@
 export const pendingSMS = campaign => campaign?.recipients?.some(r => ['QUEUED', 'SUBMITTING', 'RETRYABLE'].includes(r.status))
 export function smsStatusLabel(status, reason) {
   if (status === 'SUPPRESSED' && reason === 'BUDGET_MONTH_CLOSED') return 'Not sent — monthly sending period ended'
-  return ({ QUEUED: 'Waiting to send', SUBMITTING: 'Processing', RETRYABLE: 'Waiting to process',
-    SIMULATED: 'Simulation complete — no real SMS sent', UNKNOWN: 'Needs review — outcome unknown',
-    SUPPRESSED: 'Not sent — customer is no longer eligible', FAILED: 'Could not send',
-    SENT: 'Sent — delivery not confirmed', ACCEPTED: 'Accepted — delivery not confirmed', DELIVERED: 'Delivered',
-    UNDELIVERED: 'Could not be delivered' })[status] || 'Status unavailable'
+  return ({ QUEUED: 'Queued', SUBMITTING: 'Processing', RETRYABLE: 'Waiting to process',
+    SIMULATED: 'Simulation complete — no real SMS sent', UNKNOWN: 'Delivery unknown — needs review',
+    SUPPRESSED: 'Not sent — customer is no longer eligible', FAILED: 'Failed — message could not be sent',
+    SENT: 'Sent — delivery not confirmed', ACCEPTED: 'Queued — accepted by provider; delivery not confirmed', DELIVERED: 'Delivered',
+    UNDELIVERED: 'Failed — message could not be delivered' })[status] || 'Status unavailable'
 }
 export function campaignOutcome(campaign) {
   const rows = campaign?.recipients || []

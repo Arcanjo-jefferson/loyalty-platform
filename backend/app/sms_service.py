@@ -116,7 +116,8 @@ class SMSService:
         rows = []
         for row in record['recipients']:
             body = render(record['message'], row['first_name'])
-            rows.append(SMSRecipientHistory(**{**{k: row.get(k) for k in ['id', 'name', 'phone', 'status', 'updated_at', 'provider_id', 'reason', 'consent_timestamp']},
+            display_row = dict(row, status=row.get('delivery_status', row['status']))
+            rows.append(SMSRecipientHistory(**{**{k: display_row.get(k) for k in ['id', 'name', 'phone', 'status', 'updated_at', 'provider_id', 'reason', 'consent_timestamp']},
                          'body': body, **estimate(body), 'consent_decision': row.get('consent_decision', 'EXPLICIT_OPT_IN_AT_QUEUE' if record['status'] != 'DRAFT' else 'PREVIEW_ONLY')}).model_dump())
         return {k: record[k] for k in ['campaign_id', 'message', 'audience', 'created_by', 'created_at', 'updated_at', 'status',
                 'sender', 'provider', 'recipient_count', 'total_segments', 'estimated_cost_micros', 'expires_at', 'excluded_count']} | {
