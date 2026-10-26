@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Literal
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from .sms_provider import provider_identity
 
 GSM = set('@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !"#¤%&\'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà')
 EXT = set('\f^{}\\[~]|€')
@@ -62,10 +63,10 @@ class SMSSettings:
     provider: str = 'simulation'
 
     def __post_init__(self):
-        if (self.provider != 'simulation' or not isinstance(self.sender, str) or not self.sender.strip() or len(self.sender) > 80
+        if (self.provider not in {'simulation', 'twilio', 'clicksend'} or not isinstance(self.sender, str) or not self.sender.strip() or len(self.sender) > 80
                 or type(self.segment_price_micros) is not int or self.segment_price_micros <= 0
                 or type(self.monthly_limit_micros) is not int or self.monthly_limit_micros < 0):
-            raise ValueError('SMS settings must use simulation and non-negative integer EUR limits.')
+            raise ValueError('Invalid SMS provider or integer EUR limits.')
 
     @classmethod
     def for_business(cls, business):
@@ -73,6 +74,9 @@ class SMSSettings:
         if not isinstance(config, dict): raise ValueError('Invalid SMS business settings.')
         selected = config.get(business, {})
         if not isinstance(selected, dict): raise ValueError('Invalid SMS business settings.')
+        selected = dict(selected)
+        selected.setdefault('provider', os.getenv('SMS_PROVIDER', 'simulation'))
+        provider_identity(selected['provider'])
         return cls(**selected)
 
 

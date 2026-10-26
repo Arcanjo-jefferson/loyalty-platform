@@ -76,7 +76,7 @@ Planned AWS architecture:
 
 ## SMS
 
-Twilio (selected provider; no sending integration implemented)
+Provider-independent SMS preparation; simulation implemented, Twilio/ClickSend disabled.
 
 ## Source Control
 
@@ -444,7 +444,8 @@ Do not introduce biometric/facial-recognition functionality.
 
 # SMS
 
-Twilio is the selected SMS provider.
+SMS uses a provider-independent boundary. Simulation is the default; Twilio and
+ClickSend are disabled placeholders, with no real sending transport.
 
 Twilio is planned for messaging only; no Twilio SDK, sender or webhook is implemented.
 
@@ -1558,3 +1559,83 @@ Validation: full backend 342 tests + 86 subtests passed; frontend 156 tests pass
 lint/build passed; Print Agent regression 33 passed. No live AWS, real SMS or printer
 was used. Restart FastAPI to enable its lifecycle worker and reload Vite. Automated
 UI checks do not replace browser acceptance of the simplified workflow.
+
+
+## Provider-independent SMS preparation — 26 October 2026
+
+Implemented on `feature/sms-provider-integration`, branched from SMS commit
+`f883dd2`. This supersedes earlier simulation-only provider configuration details,
+while preserving completed milestones and the simplified Compose → Confirm → Result
+interface. Real SMS delivery is STILL DISABLED. No provider SDK/HTTP transport,
+credentials, webhook routes, AWS resources or data migrations are introduced.
+
+### Contracts and provider selection
+
+- `sms_contracts.py` defines immutable, validated SendRequest and Delivery models,
+  aware-timestamp delivery/STOP event models, and provider/event processor protocols.
+  Sensitive request content and phone fields are omitted from model reprs.
+- `sms_provider.py` owns an explicit allowlisted factory for simulation, twilio and
+  clicksend. The simulator remains network-free. TwilioSMSProvider and
+  ClickSendSMSProvider refuse sends and webhook verification without network calls.
+- Backend environment defaults: `SMS_PROVIDER=simulation` and
+  `SMS_REAL_DELIVERY_ENABLED=false`. Existing `SMS_BUSINESS_SETTINGS_JSON` provider
+  overrides apply only to that server-configured business; otherwise SMS_PROVIDER
+  supplies the default. No frontend selection or tenant override is accepted.
+- Only the literal false flag (case/edge-whitespace normalized) is accepted. True,
+  malformed or empty flags cannot activate real delivery. Selecting a disabled
+  provider blocks preview/dispatch with a sanitized unavailable error; it does not
+  silently simulate or reserve budget for a live provider. Unknown names fail closed.
+  Settings/history remain readable without claiming real delivery is enabled.
+- Service dispatch, automatic worker and standalone runner share the factory/gate.
+  The standalone runner validates configuration before constructing its repository.
+  The worker additionally refuses arbitrary injected transports. Offline service
+  tests retain explicit dependency injection for deterministic failure scenarios.
+
+### Campaign identity and unchanged safeguards
+
+New campaigns snapshot provider plus `provider_identity` (currently `<name>:v1`),
+with the existing sender/content/pricing snapshots. Draft confirmation rejects a
+changed provider/sender; dispatch leaves mismatched queued work untouched rather
+than redirecting it. Legacy f883dd2 campaigns already identify simulation and use
+`simulation:v1` when the additive identity field is absent. No backfill is needed.
+Future real adapters must extend identity with a non-secret account/configuration
+binding before activation, never store credentials in campaign rows.
+
+Owner/Manager route guards, Cognito tenant scope, active/valid-number/consent
+checks, durable suppression, atomic budget reservation, idempotent confirmation,
+submission fencing, concurrent-worker protection and history are preserved.
+SafeRetry remains limited to guaranteed pre-submission failures (30 seconds,
+maximum three attempts). PermanentProviderError records a sanitized FAILED result
+without retry. UncertainProviderError and unexpected failures remain UNKNOWN,
+without automatic resend or provider failover. An ACCEPTED/SENT result is never
+misrepresented as DELIVERED; this release accepts only SIMULATED dispatch results.
+
+### Prepared event interfaces; unfinished live integration
+
+ProviderEventAdapter specifies verification/normalization of delivery callbacks and
+STOP requests. SMSEventProcessor specifies trusted delivery and unsubscribe
+processing. These are interfaces only: no actual callback authentication, event
+routing, status persistence, callback deduplication or inbound STOP handling exists.
+Future implementations must authenticate the original provider request, bind its
+account/destination to a server-owned tenant and correlate the persisted message.
+They must deduplicate events, enforce safe out-of-order status transitions, and
+persist phone suppression even without an active customer. A webhook business ID
+or phone alone must never authorize tenant access. Ordinary edits cannot clear
+suppression. Future callbacks may reconcile UNKNOWN with verified evidence but
+must never initiate an automatic resend. Event models alone do not authenticate
+an event; no public webhook endpoint is exposed in this milestone.
+
+Real provider adapters, account/sender setup, signature validation, event storage
+and correlation, consent auditing, pricing/operations, birthday scheduling and
+voucher notifications remain pending separate approval. Voucher, raffle, printing,
+authentication and frontend business workflows are unchanged.
+
+Validation for provider preparation: full backend suite 363 tests plus 86 subtests
+passed; frontend 156 tests passed; Print Agent 33 tests passed; frontend lint and
+production build, Python compilation and git diff --check passed. The 21 new
+provider tests include memory/fake-DynamoDB parity, legacy identity compatibility,
+configuration isolation, hard-disabled providers, standalone preflight, typed event
+validation, permanent failure and uncertain-outcome handling. Tests used only
+local fixtures/fakes; no real messages, provider API, AWS resources or printer
+output were used. Restart FastAPI/any standalone worker to load this backend
+change. No frontend changes or mandatory migration are required.

@@ -9,7 +9,8 @@ from fastapi import HTTPException
 from .models import CustomerInput
 from .sms_models import SMSSettings, SMSRecipientHistory, estimate, render
 from .sms_repository import SMSRepository, SMSConflict
-from .sms_provider import SimulatedSMSProvider, SafeRetry
+from .sms_provider import build_provider, require_simulation, provider_identity
+from .sms_contracts import SendRequest, SafeRetry, PermanentProviderError, ProviderUnavailable
 
 ZONE = ZoneInfo('Europe/Dublin')
 TERMINAL = {'SIMULATED', 'SUPPRESSED', 'FAILED', 'UNKNOWN'}
@@ -25,13 +26,28 @@ class SMSService:
     def __init__(self, customers, provider=None, clock=None, settings=None):
         self.customers = customers
         self.store = SMSRepository(customers.repository)
-        self.provider = provider if provider is not None else SimulatedSMSProvider()
+        self.provider = provider  # Optional dependency injection for offline tests only.
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         self.settings_factory = settings or SMSSettings.for_business
 
     def settings(self, business):
         try: return self.settings_factory(business)
         except (ValueError, TypeError): raise HTTPException(503, 'SMS simulation settings are unavailable.') from None
+
+    def available_provider(self, settings):
+        try:
+            require_simulation(settings.provider)
+            return self.provider if self.provider is not None else build_provider(settings.provider)
+        except (ValueError, ProviderUnavailable):
+            raise HTTPException(503, 'SMS provider is disabled. Only simulation is available.') from None
+
+    def provider_matches(self, campaign, settings):
+        # f883dd2 records already stored provider=simulation; additive version defaults
+        # only apply to those legacy records, never infer a live provider.
+        identity = campaign.get('provider_identity', 'simulation:v1')
+        return (campaign.get('provider') == settings.provider
+                and identity == provider_identity(settings.provider)
+                and campaign['sender'] == settings.sender)
 
     def eligibility_reason(self, customer):
         if customer is None: return 'Customer is unavailable.'
@@ -108,13 +124,14 @@ class SMSService:
 
     def preview(self, user, data):
         settings = self.settings(user.business_id)
+        self.available_provider(settings)
         rows, excluded = self.audience(user.business_id, data.audience, str(data.customer_id) if data.customer_id else None)
         now = self.clock(); identity = str(uuid4())
         record = dict(business_id=user.business_id, customer_id='SMS_CAMPAIGN#' + identity,
             item_type='SMS_CAMPAIGN', campaign_id=identity, message=data.message, audience=data.audience,
             selected_customer_id=str(data.customer_id) if data.customer_id else None,
             created_by=user.subject, created_at=stamp(now), updated_at=stamp(now), status='DRAFT',
-            expires_at=stamp(now + timedelta(minutes=15)), sender=settings.sender, provider='simulation',
+            expires_at=stamp(now + timedelta(minutes=15)), sender=settings.sender, provider=settings.provider, provider_identity=provider_identity(settings.provider),
             segment_price_micros=settings.segment_price_micros, excluded_count=excluded,
             recipients=[r | dict(status='DRAFT', updated_at=stamp(now), attempts=0) for r in rows],
             **self.totals(rows, data.message, settings))
@@ -136,6 +153,9 @@ class SMSService:
             now = self.clock()
             if now >= datetime.fromisoformat(old['expires_at']): raise HTTPException(409, 'Preview expired. Preview the message again.')
             settings = self.settings(user.business_id)
+            if not self.provider_matches(old, settings):
+                raise HTTPException(409, 'SMS provider settings changed. Preview the message again.')
+            self.available_provider(settings)
             rows, _ = self.audience(user.business_id, old['audience'], old['selected_customer_id'])
             previous = [{k: row[k] for k in ['id', 'phone', 'first_name', 'name', 'consent_timestamp', 'customer_revision']} for row in old['recipients']]
             totals = self.totals(rows, old['message'], settings)
@@ -168,7 +188,7 @@ class SMSService:
         settings = self.settings(business)
         month = self.clock().astimezone(ZONE).strftime('%Y-%m')
         ledger = self.store.get(business, 'SMS_BUDGET#' + month)
-        return dict(provider='simulation', real_delivery_enabled=False, sender=settings.sender, currency='EUR',
+        return dict(provider=settings.provider, real_delivery_enabled=False, sender=settings.sender, currency='EUR',
                     monthly_limit_micros=settings.monthly_limit_micros, reserved_micros=int(ledger['reserved_micros']) if ledger else 0,
                     segment_price_micros=settings.segment_price_micros, budget_month=month, price_is_illustrative=True)
 
@@ -187,7 +207,8 @@ class SMSService:
         """Durable manual simulation runner; same operation used by the standalone worker.
         No message body/destination is logged. SUBMITTING is a permanent no-replay fence.
         """
-        self.settings(business)  # Fail closed if an operator attempts to select Twilio.
+        settings = self.settings(business)
+        provider = self.available_provider(settings)
         processed = 0
         for campaign in self.store.listing(business, 'SMS_CAMPAIGN#'):
             if campaign['status'] == 'DRAFT': continue
@@ -201,6 +222,7 @@ class SMSService:
                     if now >= datetime.fromisoformat(row['lease_until']):
                         self._finish(old, index, 'UNKNOWN', reason='SUBMISSION_OUTCOME_UNKNOWN')
                     continue
+                if not self.provider_matches(old, settings): continue  # Never reroute queued work.
                 if old.get('budget_month') != now.astimezone(ZONE).strftime('%Y-%m'):
                     self._finish(old, index, 'SUPPRESSED', reason='BUDGET_MONTH_CLOSED')
                     continue
@@ -230,10 +252,13 @@ class SMSService:
                     if not self.eligible(latest) or latest.phone != row['phone'] or stamp(latest.consent_timestamp) != row['consent_timestamp']:
                         self._finish(fence, index, 'SUPPRESSED', reason='ELIGIBILITY_CHANGED')
                         continue
-                    delivery = self.provider.send(sender=old['sender'], destination=row['phone'],
-                        body=render(old['message'], row['first_name']), message_id=old['campaign_id'] + ':' + row['id'])
+                    self.available_provider(settings)  # Recheck the hard gate before submission.
+                    delivery = provider.send(SendRequest(sender=old['sender'], destination=row['phone'],
+                        body=render(old['message'], row['first_name']), message_id=old['campaign_id'] + ':' + row['id']))
                     # Only the simulator is supported, never claim handset delivery.
                     if delivery.status != 'SIMULATED': raise ValueError('Unexpected provider status')
+                except PermanentProviderError:
+                    self._finish(fence, index, 'FAILED', reason='PROVIDER_REJECTED')
                 except SafeRetry:
                     status = 'FAILED' if target['attempts'] >= 3 else 'RETRYABLE'
                     self._finish(fence, index, status, reason='SAFE_PRE_SUBMIT_FAILURE', retry_at=stamp(now + timedelta(seconds=30)))

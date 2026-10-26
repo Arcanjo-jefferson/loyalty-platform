@@ -135,7 +135,8 @@ class SMSMemoryTests(unittest.TestCase):
     def test_settings_dublin_month_and_twilio_forbidden(self):
         self.now = datetime(2026, 6, 30, 23, 30, tzinfo=timezone.utc)
         self.assertEqual(self.service.summary('trumps')['budget_month'], '2026-07')
-        with self.assertRaises(ValueError): SMSSettings(provider='twilio')
+        self.assertEqual(SMSSettings(provider='twilio').provider, 'twilio')
+        with self.assertRaises(ValueError): SMSSettings(provider='unknown')
         with patch.dict('os.environ', {'SMS_BUSINESS_SETTINGS_JSON': '{"trumps":{"monthly_limit_micros":42,"sender":"Trumps test"}}'}):
             self.assertEqual(SMSSettings.for_business('trumps').monthly_limit_micros, 42)
             self.assertNotEqual(SMSSettings.for_business('other-business').sender, 'Trumps test')

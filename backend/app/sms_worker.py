@@ -5,7 +5,7 @@ The DynamoDB outbox is authoritative; UNKNOWN submissions are never requeued.
 import logging
 import re
 from threading import Event, Lock, Thread
-from .sms_provider import SimulatedSMSProvider
+from .sms_provider import require_worker_provider
 
 
 class SMSWorker:
@@ -27,8 +27,7 @@ class SMSWorker:
 
     def tick(self):
         # Deliberate fail-closed barrier: adding a real adapter requires separate approval.
-        if type(self.service.provider) is not SimulatedSMSProvider:
-            raise RuntimeError('Automatic SMS worker only supports simulation.')
+        require_worker_provider(self.service.provider)
         with self.lock: businesses = sorted(self.businesses)
         for business in businesses:
             if self.stopping.is_set(): break

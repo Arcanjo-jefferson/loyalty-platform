@@ -10,6 +10,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.config import Settings, build_repository
 from app.service import CustomerService
 from app.sms_service import SMSService
+from app.sms_models import SMSSettings
+from app.sms_provider import require_simulation
 
 
 def main():
@@ -17,6 +19,8 @@ def main():
     parser.add_argument('--business', required=True)
     parser.add_argument('--once', action='store_true')
     args = parser.parse_args()
+    try: require_simulation(SMSSettings.for_business(args.business).provider)
+    except (ValueError, RuntimeError): parser.error('SMS provider is disabled or misconfigured; only simulation is available.')
     config = Settings.from_environment()
     if config.customer_repository != 'dynamodb': parser.error('Standalone worker requires durable DynamoDB storage. Memory mode is processed by the application background simulator.')
     if not args.business or args.business.startswith('!'): parser.error('Use a normal business partition.')
