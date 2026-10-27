@@ -1755,3 +1755,72 @@ No real provider signatures, live callbacks, AWS data or physical printer output
 were used or verified. Restart FastAPI to load the internal service; reload Vite
 for status wording. No mandatory backfill or provider credentials are required
 for offline tests. No commit, push or merge was performed.
+
+
+## Milestone 6.1 — Serverless preparation, phase 1 (27 October 2026)
+
+Implemented on `feature/serverless-deployment`, branched from the clean completed
+Milestone 5.2 commit `06fcda3`. This phase adds AWS Lambda application compatibility
+only. No AWS infrastructure, deployed environment, scheduler or real SMS exists.
+
+Approved direction: React build in private S3 behind CloudFront, FastAPI on Lambda
+behind API Gateway HTTP API, DynamoDB, Cognito and private S3 in eu-west-1,
+scheduled Lambda for SMS processing, and existing Windows Print Agent over HTTPS.
+Initial scope remains one business, roughly nine staff, 200 customers and one
+printer. The $6–20/month target depends on later polling controls and actual usage.
+The purchased custom domain is not configured by this phase.
+
+### Implemented
+
+- Shared app factory/routes moved intact from `backend/main.py` to
+  `backend/app/application.py`. `main:app` remains the Uvicorn entry point and
+  re-exports create_app for existing callers/tests. Local behaviour is preserved.
+- Factory adds keyword-only `start_sms_worker`, default true. Lifespan starts/stops
+  the existing local simulation worker only when this flag is true.
+- New `backend/lambda_function.py` creates the shared app once with
+  `start_sms_worker=False` and wraps it in Mangum with `lifespan='off'`.
+  Handler name: `lambda_function.handler`; backend/ is the package root.
+  Lambda initialization, repeated API requests and even explicit Lambda app
+  lifespan entry cannot start its worker. The local main.app is not constructed
+  by importing the Lambda entry point.
+- Pinned `mangum==0.22.0` dependency. Offline tests execute real HTTP API payload-v2
+  translation, JSON/base64 requests, authentication/tenant/role checks, queued SMS
+  confirmation, initialization/warm reuse, and local Uvicorn/lifespan behaviour.
+- Deployment/configuration and packaging boundaries documented in
+  `backend/SERVERLESS.md`. No AWS keys, IAM bypass or new secrets introduced.
+
+The Lambda API app still creates its existing worker object for route notification
+compatibility, but does not run a background thread. SMS confirmation remains the
+same durable transaction; campaigns remain queued until an authorized processing
+operation. The existing manual simulation API is unchanged. Scheduled automatic
+processing is a later phase, not implemented or claimed here. Real provider sending
+and incoming webhook endpoints remain disabled. All customer, consent, voucher,
+raffle, visit, media and print routes/rules are unchanged.
+
+### Remaining Milestone 6 work / deployment gates
+
+- Bounded scheduled SMS worker and recovery, without automatic replay of UNKNOWN.
+- Resolve Lambda buffered payload/base64 limits for existing 5 MiB private images;
+  no media limit or upload/download architecture was changed in phase 1.
+- Efficient pending print/SMS polling and bounded device heartbeat persistence.
+- Production-only configuration validation, explicit CORS origins, dependency
+  readiness, timeout/concurrency/payload controls and Linux package benchmarking.
+- Isolated production database, media bucket and Cognito clients/pool; IAM roles,
+  infrastructure definitions, frontend build hosting, DNS/TLS and API mappings.
+- Monitoring, budget alarms, log redaction/retention, backups and tested recovery.
+- Approved staged deployment and secure on-site Print Agent acceptance. Do not
+  migrate development customer data or replay restored print jobs automatically.
+
+Production deployment is NOT complete or authorized by this phase. The optional
+in-memory default and localhost CORS remain as before; real production validation
+and configuration must be completed before deployment.
+
+Validation: targeted Lambda/worker suite **25 passed**; final full backend suite
+**422 tests plus 86 subtests passed**. Python compilation and `git diff --check`
+passed. The nine new adapter/lifecycle tests use only injected local repositories,
+synthetic HTTP API events and offline identity fixtures. Uvicorn's actual import
+configuration loads successfully; local lifecycle starts/stops the existing worker.
+Frontend and Windows Print Agent files are unchanged, so their separate suites
+were not rerun in this backend-only phase. Existing backend print, media, customer,
+Cognito, role/tenant, visit, voucher, raffle and SMS regression tests all passed.
+No AWS resources, real SMS, physical printing, commit, push or merge occurred.
